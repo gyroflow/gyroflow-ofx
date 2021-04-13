@@ -18,3 +18,18 @@ cgmath = "0.18.0"
 [patch.crates-io]
 ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "211f74c7d2955e5c53166af4f2a00f35ae6a363a" }
 ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "211f74c7d2955e5c53166af4f2a00f35ae6a363a" }
+
+[package.metadata.deb]
+maintainer = "Ilya Epifanov <elijah.epifanov@gmail.com>"
+license-file = ["LICENSE", "0"]
+extended-description = """Gyroflow OpenFX plugin"""
+depends = "$auto"
+section = "video"
+priority = "optional"
+assets = [
+    ["target/release/libgyroflow_ofx.so", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/Linux-x86-64/GyroFlow.ofx", "755"],
+    ["res/Info.plist", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/Info.plist", "644"],
+    ["README.md", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/README.md", "644"],
+    ["LICENSE-APACHE", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/LICENSE-APACHE", "644"],
+    ["LICENSE-MIT", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/LICENSE-MIT", "644"],
+]

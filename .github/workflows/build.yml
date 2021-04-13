@@ -1,0 +1,24 @@
+on: [push, pull_request]
+
+name: Build
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            INSTALL_DEPS: apt-get update -y && apt-get install -yq build-essential clang libclang-dev libopencv-dev
+          - os: macOS-latest
+            INSTALL_DEPS: brew install opencv
+          - os: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+      - run: ${{ matrix.INSTALL_DEPS }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
