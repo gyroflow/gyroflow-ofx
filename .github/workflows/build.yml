@@ -3,32 +3,55 @@ on: [push, pull_request]
 name: Build
 
 jobs:
-  build:
-    name: Build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            INSTALL_DEPS: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
-          - os: macOS-latest
-            INSTALL_DEPS: brew install opencv
-          - os: windows-latest
-            INSTALL_DEPS: choco install llvm opencv
+  # linux:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     profile: minimal
+      # - uses: Swatinem/rust-cache@v1
+  #     - run: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: build
+  #         args: --release
+
+  macos:
+    runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
-      - run: ${{ matrix.INSTALL_DEPS }}
-      - name: Install LLVM and Clang # required for bindgen to work, see https://github.com/rust-lang/rust-bindgen/issues/1797
-        uses: KyleMayes/install-llvm-action@32c4866ebb71e0949e8833eb49beeebed48532bd
-        if: matrix.config.os == 'windows-latest'
         with:
-          version: "11.0"
-          directory: ${{ runner.temp }}/llvm
-      - name: Set LIBCLANG_PATH
-        if: matrix.config.os == 'windows-latest'
-        run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
+          profile: minimal
+      - uses: Swatinem/rust-cache@v1
+      - run: echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/usr/lib/" >> $GITHUB_ENV
+      - run: cat $GITHUB_ENV
+      - run: ls -l $DYLD_FALLBACK_LIBRARY_PATH
+      - run: brew install opencv
       - uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release
+
+  # windows:
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     profile: minimal
+      # - uses: Swatinem/rust-cache@v1
+  #     - run: choco install opencv ninja
+  #     - run: echo "OPENCV_DIR=C:\tools\opencv\build" >> $env:GITHUB_ENV
+  #     - name: Install LLVM and Clang # required for bindgen to work, see https://github.com/rust-lang/rust-bindgen/issues/1797
+  #       uses: KyleMayes/install-llvm-action@32c4866ebb71e0949e8833eb49beeebed48532bd
+  #       with:
+  #         version: "11.0"
+  #         directory: ${{ runner.temp }}/llvm
+  #     - name: Set LIBCLANG_PATH
+  #       run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: build
+  #         args: --release
