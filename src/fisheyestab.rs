@@ -2,6 +2,8 @@ use std::fmt::Display;
 
 use ofx::*;
 use opencv::prelude::*;
+use rayon::prelude::*;
+use core::ffi::c_void;
 
 plugin_module!(
 	"com.github.ilya-epifanov.gyroflow-ofx.fisheyestab",
@@ -125,9 +127,11 @@ impl Execute for FisheyeStabilizerPlugin {
 
 
                 let src = source_image.get_descriptor::<RGBAColourF>()?;
-                let mut tiles = output_image.get_tiles_mut::<RGBAColourF>(1)?;
-                assert_eq!(tiles.len(), 1);
-                let dst = &mut tiles[0];
+                // let mut tiles = output_image.get_tiles_mut::<RGBAColourF>(1)?;
+                // assert_eq!(tiles.len(), 1);
+                // let dst = &mut tiles[0];
+                let dst = output_image.get_descriptor::<RGBAColourF>()?;
+                dst.dim
                 
                 let img_dim = opencv::core::Size_::new(src.row(0).len() as i32, dst.y2);
                 // let img_dim = opencv::core::Size_::new(params.calibration_dim[0], params.calibration_dim[1]);
@@ -196,17 +200,37 @@ impl Execute for FisheyeStabilizerPlugin {
                     &mut map2
                 ).unwrap();
         
-                let mut src_mat = Mat::new_rows_cols_with_default(dst.y2 - dst.y1, dst.row(0).len() as i32, opencv::core::CV_32FC4, Default::default()).unwrap();
-                let mut dst_mat = Mat::new_rows_cols_with_default(dst.y2 - dst.y1, dst.row(0).len() as i32, opencv::core::CV_32FC4, Default::default()).unwrap();
+                // let mut src_mat = Mat::new_rows_cols_with_default(dst.y2 - dst.y1, dst.row(0).len() as i32, opencv::core::CV_32FC4, Default::default()).unwrap();
+                // let mut dst_mat = Mat::new_rows_cols_with_default(dst.y2 - dst.y1, dst.row(0).len() as i32, opencv::core::CV_32FC4, Default::default()).unwrap();
 
-                for y in dst.y1..dst.y2 {
-                    for (x, p) in src.row(y).iter().enumerate() {
-                        let p = opencv::core::Vec4f::from([p.r, p.g, p.b, p.a]);
-                        *src_mat.at_2d_mut(y, x as i32).unwrap() = p;
-                    }
-                }
+                let mut src_buf = src.data();
+                let mut src_mat = unsafe {
+                    Mat::new_rows_cols_with_data(
+                        dst.y2 - dst.y1,
+                        dst.row(0).len() as i32,
+                        opencv::core::CV_32FC4,
+                        src_buf.ptr_mut(0) as *mut c_void,
+                        (src_buf.byte_offset(0, 1) - src_buf.byte_offset(0, 0)) as usize).unwrap()
+                };
 
-                src_mat.copy_to(&mut dst_mat).unwrap();
+                let mut dst_buf = dst.data();
+                let mut dst_mat = unsafe {
+                    Mat::new_rows_cols_with_data(
+                        dst.y2 - dst.y1,
+                        dst.row(0).len() as i32,
+                        opencv::core::CV_32FC4,
+                        dst_buf.ptr_mut(0) as *mut c_void,
+                        (dst_buf.byte_offset(0, 1) - dst_buf.byte_offset(0, 0)) as usize).unwrap()
+                };
+
+                // for y in dst.y1..dst.y2 {
+                //     for (x, p) in src.row(y).iter().enumerate() {
+                //         let p = opencv::core::Vec4f::from([p.r, p.g, p.b, p.a]);
+                //         *src_mat.at_2d_mut(y, x as i32).unwrap() = p;
+                //     }
+                // }
+
+                // src_mat.copy_to(&mut dst_mat).unwrap();
 
                 opencv::imgproc::remap(&src_mat, &mut dst_mat, &map1, &map2, 
                     opencv::imgproc::INTER_LINEAR,
@@ -214,15 +238,15 @@ impl Execute for FisheyeStabilizerPlugin {
                     Default::default()
                 ).unwrap();
 
-                for y in dst.y1..dst.y2 {
-                    for (x, p) in dst.row(y).iter_mut().enumerate() {
-                        let p_src = dst_mat.at_2d::<opencv::core::Vec4f>(y, x as i32).unwrap();
-                        p.r = p_src[0];
-                        p.g = p_src[1];
-                        p.b = p_src[2];
-                        p.a = p_src[3];
-                    }
-                }
+                // for y in dst.y1..dst.y2 {
+                //     for (x, p) in dst.row(y).iter_mut().enumerate() {
+                //         let p_src = dst_mat.at_2d::<opencv::core::Vec4f>(y, x as i32).unwrap();
+                //         p.r = p_src[0];
+                //         p.g = p_src[1];
+                //         p.b = p_src[2];
+                //         p.a = p_src[3];
+                //     }
+                // }
 
 				if effect.abort()? {
 					FAILED
@@ -409,6 +433,33 @@ impl Execute for FisheyeStabilizerPlugin {
 
 				OK
 			}
+
+            Load => {
+                let opencl_have = opencv::core::have_opencl().unwrap();
+                if opencl_have {
+                    opencv::core::set_use_opencl(true).unwrap();
+                    let mut platforms = opencv::types::VectorOfPlatformInfo::new();
+                    opencv::core::get_platfoms_info(&mut platforms).unwrap();
+                    for (platf_num, platform) in platforms.into_iter().enumerate() {
+                        println!("Platform #{}: {}", platf_num, platform.name().unwrap());
+                        for dev_num in 0..platform.device_number().unwrap() {
+                            let mut dev = opencv::core::Device::default();
+                            platform.get_device(&mut dev, dev_num).unwrap();
+                            println!("  OpenCL device #{}: {}", dev_num, dev.name().unwrap());
+                            println!("    vendor:  {}", dev.vendor_name().unwrap());
+                            println!("    version: {}", dev.version().unwrap());
+                        }
+                    }
+                }
+                let opencl_use = opencv::core::use_opencl().unwrap();
+                println!(
+                    "OpenCL is {} and {}",
+                    if opencl_have { "available" } else { "not available" },
+                    if opencl_use { "enabled" } else { "disabled" },
+                );
+
+                OK
+            }
 
             _ => REPLY_DEFAULT,
 		}
