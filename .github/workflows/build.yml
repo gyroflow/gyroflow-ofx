@@ -3,36 +3,34 @@ on: [push, pull_request]
 name: Build
 
 jobs:
-  # linux:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-      # - uses: actions-rs/toolchain@v1
-      #   with:
-      #     profile: minimal
-      # - uses: Swatinem/rust-cache@v1
-  #     - run: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: --release
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+      - uses: Swatinem/rust-cache@v1
+      - run: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
 
-  # macos:
-  #   runs-on: macOS-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #     - uses: Swatinem/rust-cache@v1
-  #     - run: echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/" >> $GITHUB_ENV
-  #     - run: cat $GITHUB_ENV
-  #     - run: ls -l $DYLD_FALLBACK_LIBRARY_PATH
-  #     - run: brew install opencv
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: --release
+  macos:
+    runs-on: macOS-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+      - uses: Swatinem/rust-cache@v1
+      - run: echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/" >> $GITHUB_ENV
+      - run: brew install opencv
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
 
   windows:
     runs-on: windows-latest
@@ -50,10 +48,6 @@ jobs:
       - run: echo "OPENCV_LINK_LIBS=opencv_world452" >> $env:GITHUB_ENV
       - run: echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
-      - run: ls "C:\Program Files\LLVM\bin"
-      - run: echo $env:PATH
-      - run: echo $env:GITHUB_PATH
-      - run: cat $env:GITHUB_PATH
       - uses: actions-rs/cargo@v1
         with:
           command: build
