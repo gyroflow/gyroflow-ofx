@@ -17,22 +17,22 @@ jobs:
   #         command: build
   #         args: --release
 
-  macos:
-    runs-on: macOS-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-      - uses: Swatinem/rust-cache@v1
-      - run: echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/" >> $GITHUB_ENV
-      - run: cat $GITHUB_ENV
-      - run: ls -l $DYLD_FALLBACK_LIBRARY_PATH
-      - run: brew install opencv
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+  # macos:
+  #   runs-on: macOS-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #     - uses: Swatinem/rust-cache@v1
+  #     - run: echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/" >> $GITHUB_ENV
+  #     - run: cat $GITHUB_ENV
+  #     - run: ls -l $DYLD_FALLBACK_LIBRARY_PATH
+  #     - run: brew install opencv
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: build
+  #         args: --release
 
   windows:
     runs-on: windows-latest
@@ -48,7 +48,7 @@ jobs:
       - run: echo "OPENCV_LINK_PATHS=C:\tools\opencv\build\x64\vc15\lib" >> $env:GITHUB_ENV
       - run: echo "OPENCV_INCLUDE_PATHS=C:\tools\opencv\build\include" >> $env:GITHUB_ENV
       - run: echo "OPENCV_LINK_LIBS=opencv_world452" >> $env:GITHUB_ENV
-      - run: echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
+      - run: echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: echo "$env:GITHUB_PATH"
       - run: cat "$env:GITHUB_PATH"
       - uses: actions-rs/cargo@v1
