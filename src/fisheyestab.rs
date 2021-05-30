@@ -1,12 +1,9 @@
-use std::fmt::Display;
-
 use ofx::*;
 use opencv::prelude::*;
-use rayon::prelude::*;
 use core::ffi::c_void;
 
 plugin_module!(
-	"com.github.ilya-epifanov.gyroflow-ofx.fisheyestab",
+	"nl.smslv.gyroflowofx.fisheyestab",
 	ApiVersion(1),
 	PluginVersion(1, 0),
 	FisheyeStabilizerPlugin::new
@@ -95,18 +92,6 @@ const PARAM_CORRECTION_QUAT_X_LABEL: &str = "Correction X";
 const PARAM_CORRECTION_QUAT_Y_LABEL: &str = "Correction Y";
 const PARAM_CORRECTION_QUAT_Z_LABEL: &str = "Correction Z";
 
-fn print_matrix<T: DataType + Display>(mat: &Mat) {
-    print!("[");
-    for row in 0..mat.rows() {
-        print!("[");
-        for col in 0..mat.cols() {
-            print!("{}, ", mat.at_2d::<T>(row, col).unwrap());
-        }
-        print!("], ");
-    }
-    print!("]");
-}
-
 impl Execute for FisheyeStabilizerPlugin {
 	#[allow(clippy::float_cmp)]
 	fn execute(&mut self, _plugin_context: &PluginContext, action: &mut Action) -> Result<Int> {
@@ -114,27 +99,20 @@ impl Execute for FisheyeStabilizerPlugin {
 		match *action {
 			Render(ref mut effect, ref in_args) => {
 				let time = in_args.get_time()?;
-				// TODO: what happens if render_window < full size?
-				// let render_window = in_args.get_render_window()?;
 				let instance_data: &mut InstanceData = effect.get_instance_data()?;
 
 				let source_image = instance_data.source_clip.get_image(time)?;
 				let output_image = instance_data.output_clip.get_image_mut(time)?;
+				let output_image = output_image.borrow_mut();
 
                 let params = instance_data.get_per_frame_params(time)?;
 
-				let mut output_image = output_image.borrow_mut();
-
-
                 let src = source_image.get_descriptor::<RGBAColourF>()?;
-                // let mut tiles = output_image.get_tiles_mut::<RGBAColourF>(1)?;
-                // assert_eq!(tiles.len(), 1);
-                // let dst = &mut tiles[0];
                 let dst = output_image.get_descriptor::<RGBAColourF>()?;
-                dst.dim
+
+                let (dst_width, dst_height) = dst.data().dimensions();
                 
-                let img_dim = opencv::core::Size_::new(src.row(0).len() as i32, dst.y2);
-                // let img_dim = opencv::core::Size_::new(params.calibration_dim[0], params.calibration_dim[1]);
+                let img_dim = opencv::core::Size_::new(dst_width as i32, dst_height as i32);
 
                 let scale = src.row(0).len() as f64 / params.calibration_dim[0] as f64;
                 let mut scaled_k = Mat::from_slice_2d(&params.camera_matrix).unwrap();
@@ -146,10 +124,6 @@ impl Execute for FisheyeStabilizerPlugin {
                 }
 
                 *scaled_k.at_2d_mut(2, 2).unwrap() = 1.0;
-
-                // print!("scaled_K: ");
-                // print_matrix::<f64>(&scaled_k);
-                // println!();
 
                 let distortion_coeffs = Mat::from_slice(&params.distortion_coeffs).unwrap();
 
@@ -183,10 +157,6 @@ impl Execute for FisheyeStabilizerPlugin {
                 *r.at_2d_mut(2, 1).unwrap() = qm.y.z as f32;
                 *r.at_2d_mut(2, 2).unwrap() = qm.z.z as f32;
 
-                // print!("R: ");
-                // print_matrix::<f32>(&r);
-                // println!();
-
                 let mut map1 = Mat::default();
                 let mut map2 = Mat::default();
                 opencv::calib3d::fisheye_init_undistort_rectify_map(
@@ -199,14 +169,11 @@ impl Execute for FisheyeStabilizerPlugin {
                     &mut map1,
                     &mut map2
                 ).unwrap();
-        
-                // let mut src_mat = Mat::new_rows_cols_with_default(dst.y2 - dst.y1, dst.row(0).len() as i32, opencv::core::CV_32FC4, Default::default()).unwrap();
-                // let mut dst_mat = Mat::new_rows_cols_with_default(dst.y2 - dst.y1, dst.row(0).len() as i32, opencv::core::CV_32FC4, Default::default()).unwrap();
 
                 let mut src_buf = src.data();
-                let mut src_mat = unsafe {
+                let src_mat = unsafe {
                     Mat::new_rows_cols_with_data(
-                        dst.y2 - dst.y1,
+                        dst_height as i32,
                         dst.row(0).len() as i32,
                         opencv::core::CV_32FC4,
                         src_buf.ptr_mut(0) as *mut c_void,
@@ -216,37 +183,18 @@ impl Execute for FisheyeStabilizerPlugin {
                 let mut dst_buf = dst.data();
                 let mut dst_mat = unsafe {
                     Mat::new_rows_cols_with_data(
-                        dst.y2 - dst.y1,
+                        dst_height as i32,
                         dst.row(0).len() as i32,
                         opencv::core::CV_32FC4,
                         dst_buf.ptr_mut(0) as *mut c_void,
                         (dst_buf.byte_offset(0, 1) - dst_buf.byte_offset(0, 0)) as usize).unwrap()
                 };
 
-                // for y in dst.y1..dst.y2 {
-                //     for (x, p) in src.row(y).iter().enumerate() {
-                //         let p = opencv::core::Vec4f::from([p.r, p.g, p.b, p.a]);
-                //         *src_mat.at_2d_mut(y, x as i32).unwrap() = p;
-                //     }
-                // }
-
-                // src_mat.copy_to(&mut dst_mat).unwrap();
-
                 opencv::imgproc::remap(&src_mat, &mut dst_mat, &map1, &map2, 
                     opencv::imgproc::INTER_LINEAR,
                     opencv::core::BORDER_CONSTANT,
                     Default::default()
                 ).unwrap();
-
-                // for y in dst.y1..dst.y2 {
-                //     for (x, p) in dst.row(y).iter_mut().enumerate() {
-                //         let p_src = dst_mat.at_2d::<opencv::core::Vec4f>(y, x as i32).unwrap();
-                //         p.r = p_src[0];
-                //         p.g = p_src[1];
-                //         p.b = p_src[2];
-                //         p.a = p_src[3];
-                //     }
-                // }
 
 				if effect.abort()? {
 					FAILED
@@ -415,20 +363,17 @@ impl Execute for FisheyeStabilizerPlugin {
 
 			Describe(ref mut effect) => {
 				let mut effect_properties: EffectDescriptor = effect.properties()?;
-				effect_properties.set_grouping("Ofx-rs")?;
+				effect_properties.set_grouping("Warp")?;
 
 				effect_properties.set_label("Fisheye stabilizer")?;
 				effect_properties.set_short_label("Fisheye stabilizer")?;
 				effect_properties.set_long_label("Fisheye stabilizer")?;
 
 				effect_properties.set_supported_pixel_depths(&[
-					// BitDepth::Byte,
-					// BitDepth::Short,
 					BitDepth::Float,
 				])?;
 				effect_properties.set_supported_contexts(&[
 					ImageEffectContext::Filter,
-					// ImageEffectContext::General,
 				])?;
 
 				OK

@@ -14,13 +14,10 @@ path="src/lib.rs"
 ofx = "0.3"
 opencv = { version = "0.53", features = ["clang-runtime"] }
 cgmath = "0.18.0"
-rayon = "1.5.0"
 
 [patch.crates-io]
-ofx = { path = "../ofx-rs/ofx" }
-ofx_sys = { path = "../ofx-rs/ofx-sys" }
-# ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "211f74c7d2955e5c53166af4f2a00f35ae6a363a" }
-# ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "211f74c7d2955e5c53166af4f2a00f35ae6a363a" }
+ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
+ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
 
 [package.metadata.deb]
 maintainer = "Ilya Epifanov <elijah.epifanov@gmail.com>"
