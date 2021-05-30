@@ -48,9 +48,10 @@ jobs:
       - run: echo "OPENCV_LINK_PATHS=C:\tools\opencv\build\x64\vc15\lib" >> $env:GITHUB_ENV
       - run: echo "OPENCV_INCLUDE_PATHS=C:\tools\opencv\build\include" >> $env:GITHUB_ENV
       - run: echo "OPENCV_LINK_LIBS=opencv_world452" >> $env:GITHUB_ENV
-      - run: echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - run: echo "$env:GITHUB_PATH"
-      - run: cat "$env:GITHUB_PATH"
+      # - run: echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: echo "::add-path::C:\Program Files\LLVM\bin"
+      # - run: echo "$env:GITHUB_PATH"
+      # - run: cat "$env:GITHUB_PATH"
       - uses: actions-rs/cargo@v1
         with:
           command: build
