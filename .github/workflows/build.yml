@@ -12,8 +12,6 @@ jobs:
           profile: minimal
       - uses: Swatinem/rust-cache@v1
       - run: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
-      - run: ls /usr/include/opencv4
-      - run: ls /usr/include/opencv4/opencv2
       - uses: actions-rs/cargo@v1
         with:
           command: build

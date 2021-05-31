@@ -18,6 +18,7 @@ cgmath = "0.18.0"
 [patch.crates-io]
 ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
 ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
+opencv = { git = "https://github.com/twistedfall/opencv-rust.git", rev = "0a7dd132789fe465e812d7d677ddefd3afb3884e" }
 
 [package.metadata.deb]
 maintainer = "Ilya Epifanov <elijah.epifanov@gmail.com>"
