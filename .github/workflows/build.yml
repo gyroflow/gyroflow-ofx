@@ -14,6 +14,9 @@ jobs:
       - run: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
       - uses: actions-rs/cargo@v1
         with:
+          command: clean
+      - uses: actions-rs/cargo@v1
+        with:
           command: build
           args: --release
 
