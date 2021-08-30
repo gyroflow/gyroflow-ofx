@@ -1,32 +1,35 @@
+use measure_time::*;
+use nalgebra::*;
+use ndarray::{prelude::*, StrideShape};
 use ofx::*;
-use opencv::prelude::*;
-use core::ffi::c_void;
+
+use crate::fisheye::{estimate_new_camera_matrix_for_undistort_rectify, undistort_rectify};
 
 plugin_module!(
-	"nl.smslv.gyroflowofx.fisheyestab",
-	ApiVersion(1),
-	PluginVersion(1, 0),
-	FisheyeStabilizerPlugin::new
+    "nl.smslv.gyroflowofx.fisheyestab",
+    ApiVersion(1),
+    PluginVersion(1, 0),
+    FisheyeStabilizerPlugin::new
 );
 
 #[derive(Default)]
-struct FisheyeStabilizerPlugin {
-}
+struct FisheyeStabilizerPlugin {}
 
 impl FisheyeStabilizerPlugin {
-	pub fn new() -> FisheyeStabilizerPlugin {
-		FisheyeStabilizerPlugin::default()
-	}
+    pub fn new() -> FisheyeStabilizerPlugin {
+        FisheyeStabilizerPlugin::default()
+    }
 }
 #[allow(unused)]
 struct InstanceData {
-	source_clip: ClipInstance,
-	output_clip: ClipInstance,
+    source_clip: ClipInstance,
+    output_clip: ClipInstance,
 
-	param_k: [[ParamHandle<Double>; 3]; 3],
-	param_distortion: [ParamHandle<Double>; 4],
+    param_k: [[ParamHandle<Double>; 3]; 3],
+    param_distortion: [ParamHandle<Double>; 4],
     param_calibration_dim: [ParamHandle<Double>; 2],
     param_correction_quat: [ParamHandle<Double>; 4],
+    param_fov_scale: ParamHandle<Double>,
 }
 
 struct PerFrameParams {
@@ -34,6 +37,7 @@ struct PerFrameParams {
     distortion_coeffs: [f64; 4],
     calibration_dim: [i32; 2],
     correction_quat: [f64; 4],
+    fov_scale: f64,
 }
 
 const PARAM_MAIN_NAME: &str = "Main";
@@ -92,18 +96,22 @@ const PARAM_CORRECTION_QUAT_X_LABEL: &str = "Correction X";
 const PARAM_CORRECTION_QUAT_Y_LABEL: &str = "Correction Y";
 const PARAM_CORRECTION_QUAT_Z_LABEL: &str = "Correction Z";
 
-impl Execute for FisheyeStabilizerPlugin {
-	#[allow(clippy::float_cmp)]
-	fn execute(&mut self, _plugin_context: &PluginContext, action: &mut Action) -> Result<Int> {
-		use Action::*;
-		match *action {
-			Render(ref mut effect, ref in_args) => {
-				let time = in_args.get_time()?;
-				let instance_data: &mut InstanceData = effect.get_instance_data()?;
+const PARAM_FOV_SCALE: &str = "fovScale";
 
-				let source_image = instance_data.source_clip.get_image(time)?;
-				let output_image = instance_data.output_clip.get_image_mut(time)?;
-				let output_image = output_image.borrow_mut();
+const PARAM_FOV_SCALE_LABEL: &str = "FOV scale";
+
+impl Execute for FisheyeStabilizerPlugin {
+    #[allow(clippy::float_cmp)]
+    fn execute(&mut self, _plugin_context: &PluginContext, action: &mut Action) -> Result<Int> {
+        use Action::*;
+        match *action {
+            Render(ref mut effect, ref in_args) => {
+                let time = in_args.get_time()?;
+                let instance_data: &mut InstanceData = effect.get_instance_data()?;
+
+                let source_image = instance_data.source_clip.get_image(time)?;
+                let output_image = instance_data.output_clip.get_image_mut(time)?;
+                let output_image = output_image.borrow_mut();
 
                 let params = instance_data.get_per_frame_params(time)?;
 
@@ -111,118 +119,115 @@ impl Execute for FisheyeStabilizerPlugin {
                 let dst = output_image.get_descriptor::<RGBAColourF>()?;
 
                 let (dst_width, dst_height) = dst.data().dimensions();
-                
-                let img_dim = opencv::core::Size_::new(dst_width as i32, dst_height as i32);
 
                 let scale = src.row(0).len() as f64 / params.calibration_dim[0] as f64;
-                let mut scaled_k = Mat::from_slice_2d(&params.camera_matrix).unwrap();
-                for r in 0..scaled_k.rows() {
-                    for c in 0..scaled_k.cols() {
-                        let e: &mut f64 = scaled_k.at_2d_mut(r, c).unwrap();
-                        *e = *e * scale;
-                    }
-                }
 
-                *scaled_k.at_2d_mut(2, 2).unwrap() = 1.0;
+                let mut scaled_k_na = Matrix3::new(
+                    params.camera_matrix[0][0],
+                    params.camera_matrix[0][1],
+                    params.camera_matrix[0][2],
+                    params.camera_matrix[1][0],
+                    params.camera_matrix[1][1],
+                    params.camera_matrix[1][2],
+                    params.camera_matrix[2][0],
+                    params.camera_matrix[2][1],
+                    params.camera_matrix[2][2],
+                ) * scale;
+                scaled_k_na[(2, 2)] = 1.0;
 
-                let distortion_coeffs = Mat::from_slice(&params.distortion_coeffs).unwrap();
+                let distortion_coeffs = Vector4::from_row_slice(&params.distortion_coeffs);
 
-                let mut new_k = Mat::default();
-                opencv::calib3d::estimate_new_camera_matrix_for_undistort_rectify(
-                    &scaled_k, 
-                    &distortion_coeffs, 
-                    img_dim,
-                    &Mat::eye(3, 3, opencv::core::CV_32F).unwrap(),
-                    &mut new_k,
-                    0.0,
-                    img_dim,
-                    1.1,
-                ).unwrap();
-
-                let q = cgmath::Quaternion::new(
-                    -params.correction_quat[0],
-                    params.correction_quat[1],
-                    -params.correction_quat[2],
-                    -params.correction_quat[3],
-                );
-                let qm = cgmath::Matrix3::from(q);
-                let mut r = Mat::new_rows_cols_with_default(3, 3, opencv::core::CV_32F, Default::default()).unwrap();
-                *r.at_2d_mut(0, 0).unwrap() = qm.x.x as f32;
-                *r.at_2d_mut(0, 1).unwrap() = qm.y.x as f32;
-                *r.at_2d_mut(0, 2).unwrap() = qm.z.x as f32;
-                *r.at_2d_mut(1, 0).unwrap() = qm.x.y as f32;
-                *r.at_2d_mut(1, 1).unwrap() = qm.y.y as f32;
-                *r.at_2d_mut(1, 2).unwrap() = qm.z.y as f32;
-                *r.at_2d_mut(2, 0).unwrap() = qm.x.z as f32;
-                *r.at_2d_mut(2, 1).unwrap() = qm.y.z as f32;
-                *r.at_2d_mut(2, 2).unwrap() = qm.z.z as f32;
-
-                let mut map1 = Mat::default();
-                let mut map2 = Mat::default();
-                opencv::calib3d::fisheye_init_undistort_rectify_map(
-                    &scaled_k, 
+                let new_k_na = estimate_new_camera_matrix_for_undistort_rectify(
+                    &scaled_k_na,
                     &distortion_coeffs,
-                    &r,
-                    &new_k,
-                    img_dim,
-                    opencv::core::CV_16SC2,
-                    &mut map1,
-                    &mut map2
-                ).unwrap();
+                    [dst_width as f64, dst_height as f64],
+                    params.fov_scale,
+                );
 
-                let mut src_buf = src.data();
+                let r = UnitQuaternion::from_quaternion(Quaternion::new(
+                    params.correction_quat[0],
+                    params.correction_quat[1],
+                    params.correction_quat[2],
+                    params.correction_quat[3],
+                ));
+                let angles = r.euler_angles();
+                const ROTATION_SUBSAMPLING: i32 = 10;
+                let r = Rotation::from_euler_angles(
+                    -angles.0 / ROTATION_SUBSAMPLING as f64,
+                    -angles.1 / ROTATION_SUBSAMPLING as f64,
+                    angles.2 / ROTATION_SUBSAMPLING as f64,
+                );
+
+                let qm = {
+                    let mut m = Matrix3::<f64>::identity();
+                    for _ in 0..ROTATION_SUBSAMPLING {
+                        m = r * m;
+                    }
+                    m
+                };
+
+                let src_buf = src.data();
                 let src_mat = unsafe {
-                    Mat::new_rows_cols_with_data(
-                        dst_height as i32,
-                        dst.row(0).len() as i32,
-                        opencv::core::CV_32FC4,
-                        src_buf.ptr_mut(0) as *mut c_void,
-                        (src_buf.byte_offset(0, 1) - src_buf.byte_offset(0, 0)) as usize).unwrap()
+                    let shape: StrideShape<_> = (dst_height as usize, dst.row(0).len(), 4)
+                        .strides((
+                            (src_buf.byte_offset(0, 1) - src_buf.byte_offset(0, 0)) as usize / 4,
+                            4,
+                            1,
+                        ))
+                        .into();
+                    ndarray::ArrayView3::from_shape_ptr(shape, src_buf.ptr(0) as *mut f32)
                 };
 
                 let mut dst_buf = dst.data();
                 let mut dst_mat = unsafe {
-                    Mat::new_rows_cols_with_data(
-                        dst_height as i32,
-                        dst.row(0).len() as i32,
-                        opencv::core::CV_32FC4,
-                        dst_buf.ptr_mut(0) as *mut c_void,
-                        (dst_buf.byte_offset(0, 1) - dst_buf.byte_offset(0, 0)) as usize).unwrap()
+                    let shape: StrideShape<_> =
+                        (dst_height as usize, dst.row(0).len(), 4).strides((
+                            (dst_buf.byte_offset(0, 1) - dst_buf.byte_offset(0, 0)) as usize / 4,
+                            4,
+                            1,
+                        ));
+                    ndarray::ArrayViewMut3::from_shape_ptr(shape, dst_buf.ptr_mut(0) as *mut f32)
                 };
 
-                opencv::imgproc::remap(&src_mat, &mut dst_mat, &map1, &map2, 
-                    opencv::imgproc::INTER_LINEAR,
-                    opencv::core::BORDER_CONSTANT,
-                    Default::default()
-                ).unwrap();
+                {
+                    debug_time!("undistort_rectify");
+                    undistort_rectify(
+                        &scaled_k_na,
+                        &distortion_coeffs,
+                        &qm,
+                        &new_k_na,
+                        &src_mat,
+                        &mut dst_mat,
+                    )
+                }
 
-				if effect.abort()? {
-					FAILED
-				} else {
-					OK
-				}
-			}
+                if effect.abort()? {
+                    FAILED
+                } else {
+                    OK
+                }
+            }
 
-			CreateInstance(ref mut effect) => {
-				let param_set = effect.parameter_set()?;
+            CreateInstance(ref mut effect) => {
+                let param_set = effect.parameter_set()?;
 
-				let source_clip = effect.get_simple_input_clip()?;
-				let output_clip = effect.get_output_clip()?;
+                let source_clip = effect.get_simple_input_clip()?;
+                let output_clip = effect.get_output_clip()?;
 
                 let param_k = [
                     [
-                        param_set.parameter(PARAM_K_0_0)?, 
-                        param_set.parameter(PARAM_K_0_1)?, 
+                        param_set.parameter(PARAM_K_0_0)?,
+                        param_set.parameter(PARAM_K_0_1)?,
                         param_set.parameter(PARAM_K_0_2)?,
                     ],
                     [
-                        param_set.parameter(PARAM_K_1_0)?, 
-                        param_set.parameter(PARAM_K_1_1)?, 
+                        param_set.parameter(PARAM_K_1_0)?,
+                        param_set.parameter(PARAM_K_1_1)?,
                         param_set.parameter(PARAM_K_1_2)?,
                     ],
                     [
-                        param_set.parameter(PARAM_K_2_0)?, 
-                        param_set.parameter(PARAM_K_2_1)?, 
+                        param_set.parameter(PARAM_K_2_0)?,
+                        param_set.parameter(PARAM_K_2_1)?,
                         param_set.parameter(PARAM_K_2_2)?,
                     ],
                 ];
@@ -246,174 +251,316 @@ impl Execute for FisheyeStabilizerPlugin {
                     param_set.parameter(PARAM_CORRECTION_QUAT_Z)?,
                 ];
 
-				effect.set_instance_data(InstanceData {
-					source_clip,
-					output_clip,
-					param_k,
-					param_distortion,
-					param_calibration_dim,
+                let param_fov_scale = param_set.parameter(PARAM_FOV_SCALE)?;
+
+                effect.set_instance_data(InstanceData {
+                    source_clip,
+                    output_clip,
+                    param_k,
+                    param_distortion,
+                    param_calibration_dim,
                     param_correction_quat,
-				})?;
-
-				OK
-			}
-
-			DestroyInstance(ref mut _effect) => OK,
-
-			DescribeInContext(ref mut effect, ref _in_args) => {
-				let mut output_clip = effect.new_output_clip()?;
-				output_clip
-					.set_supported_components(&[ImageComponent::RGBA])?;
-                
-				let mut input_clip = effect.new_simple_input_clip()?;
-				input_clip
-					.set_supported_components(&[ImageComponent::RGBA])?;
-
-				fn define_plain_param(
-					param_set: &mut ParamSetHandle,
-					name: &str,
-                    default: f64,
-					label: &'static str,
-					parent: Option<&'static str>,
-				) -> Result<()> {
-					let mut param_props = param_set.param_define_double(name)?;
-
-					param_props.set_double_type(ParamDoubleType::Plain)?;
-					param_props.set_label(label)?;
-					param_props.set_hint(label)?;
-					param_props.set_default(default)?;
-					param_props.set_display_min(-100.0)?;
-					param_props.set_display_max(100.0)?;
-					param_props.set_script_name(name)?;
-
-					if let Some(parent) = parent {
-						param_props.set_parent(parent)?;
-					}
-
-					Ok(())
-				}
-
-				let mut param_set = effect.parameter_set()?;
-
-                let mut param_props = param_set.param_define_group(PARAM_K)?;
-				param_props.set_hint("Camera matrix")?;
-				param_props.set_label("Camera matrix")?;
-
-				define_plain_param(&mut param_set,PARAM_K_0_0,2004.559898061336, PARAM_K_0_0_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_0_1,0.0, PARAM_K_0_1_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_0_2,1920.0, PARAM_K_0_2_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_1_0,0.0, PARAM_K_1_0_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_1_1,1502.6021031882099, PARAM_K_1_1_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_1_2,1080.0, PARAM_K_1_2_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_2_0,0.0, PARAM_K_2_0_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_2_1,0.0, PARAM_K_2_1_LABEL,Some(PARAM_K))?;
-				define_plain_param(&mut param_set,PARAM_K_2_2,1.0, PARAM_K_2_2_LABEL,Some(PARAM_K))?;
-
-                let mut param_props = param_set.param_define_group(PARAM_CALIB_DIM)?;
-				param_props.set_hint("Camera calibration dimensions")?;
-				param_props.set_label("Camera calibration dimensions")?;
-
-                define_plain_param(&mut param_set,PARAM_CALIB_WIDTH,3840.0, PARAM_CALIB_WIDTH_LABEL,None)?;
-                define_plain_param(&mut param_set,PARAM_CALIB_HEIGHT,2160.0, PARAM_CALIB_HEIGHT_LABEL,None)?;
-
-                let mut param_props = param_set.param_define_group(PARAM_DISTORTION)?;
-				param_props.set_hint("Distortion coefficients")?;
-				param_props.set_label("Distortion coefficients")?;
-
-				define_plain_param(&mut param_set,PARAM_DISTORTION_0,-0.04614696357651861, PARAM_DISTORTION_0_LABEL,Some(PARAM_DISTORTION))?;
-				define_plain_param(&mut param_set,PARAM_DISTORTION_1,0.027871487382326275, PARAM_DISTORTION_1_LABEL,Some(PARAM_DISTORTION))?;
-				define_plain_param(&mut param_set,PARAM_DISTORTION_2,-0.04499706001247255, PARAM_DISTORTION_2_LABEL,Some(PARAM_DISTORTION))?;
-				define_plain_param(&mut param_set,PARAM_DISTORTION_3,0.017210690844729263, PARAM_DISTORTION_3_LABEL,Some(PARAM_DISTORTION))?;
-
-                let mut param_props = param_set.param_define_group(PARAM_CORRECTION_QUAT)?;
-				param_props.set_hint("Correction quaternion")?;
-				param_props.set_label("Correction quaternion")?;
-
-                define_plain_param(&mut param_set,PARAM_CORRECTION_QUAT_W,0.9999816018844726, PARAM_CORRECTION_QUAT_W_LABEL,Some(PARAM_CORRECTION_QUAT))?;
-                define_plain_param(&mut param_set,PARAM_CORRECTION_QUAT_X,0.005914784980046915, PARAM_CORRECTION_QUAT_X_LABEL,Some(PARAM_CORRECTION_QUAT))?;
-                define_plain_param(&mut param_set,PARAM_CORRECTION_QUAT_Y,0.0012299438397453124, PARAM_CORRECTION_QUAT_Y_LABEL,Some(PARAM_CORRECTION_QUAT))?;
-                define_plain_param(&mut param_set,PARAM_CORRECTION_QUAT_Z,0.0005463051847160959, PARAM_CORRECTION_QUAT_Z_LABEL,Some(PARAM_CORRECTION_QUAT))?;
-
-				param_set
-					.param_define_page(PARAM_MAIN_NAME)?
-					.set_children(&[
-						PARAM_K_0_0,
-						PARAM_K_0_1,
-						PARAM_K_0_2,
-						PARAM_K_1_0,
-						PARAM_K_1_1,
-						PARAM_K_1_2,
-						PARAM_K_2_0,
-						PARAM_K_2_1,
-						PARAM_K_2_2,
-						PARAM_CALIB_WIDTH,
-						PARAM_CALIB_HEIGHT,
-						PARAM_DISTORTION_0,
-						PARAM_DISTORTION_1,
-						PARAM_DISTORTION_2,
-						PARAM_DISTORTION_3,
-						PARAM_CORRECTION_QUAT_W,
-						PARAM_CORRECTION_QUAT_X,
-						PARAM_CORRECTION_QUAT_Y,
-						PARAM_CORRECTION_QUAT_Z,
-					])?;
-
-				OK
-			}
-
-			Describe(ref mut effect) => {
-				let mut effect_properties: EffectDescriptor = effect.properties()?;
-				effect_properties.set_grouping("Warp")?;
-
-				effect_properties.set_label("Fisheye stabilizer")?;
-				effect_properties.set_short_label("Fisheye stabilizer")?;
-				effect_properties.set_long_label("Fisheye stabilizer")?;
-
-				effect_properties.set_supported_pixel_depths(&[
-					BitDepth::Float,
-				])?;
-				effect_properties.set_supported_contexts(&[
-					ImageEffectContext::Filter,
-				])?;
-
-				OK
-			}
-
-            Load => {
-                let opencl_have = opencv::core::have_opencl().unwrap();
-                if opencl_have {
-                    opencv::core::set_use_opencl(true).unwrap();
-                    let mut platforms = opencv::types::VectorOfPlatformInfo::new();
-                    opencv::core::get_platfoms_info(&mut platforms).unwrap();
-                    for (platf_num, platform) in platforms.into_iter().enumerate() {
-                        println!("Platform #{}: {}", platf_num, platform.name().unwrap());
-                        for dev_num in 0..platform.device_number().unwrap() {
-                            let mut dev = opencv::core::Device::default();
-                            platform.get_device(&mut dev, dev_num).unwrap();
-                            println!("  OpenCL device #{}: {}", dev_num, dev.name().unwrap());
-                            println!("    vendor:  {}", dev.vendor_name().unwrap());
-                            println!("    version: {}", dev.version().unwrap());
-                        }
-                    }
-                }
-                let opencl_use = opencv::core::use_opencl().unwrap();
-                println!(
-                    "OpenCL is {} and {}",
-                    if opencl_have { "available" } else { "not available" },
-                    if opencl_use { "enabled" } else { "disabled" },
-                );
+                    param_fov_scale,
+                })?;
 
                 OK
             }
 
+            DestroyInstance(ref mut _effect) => OK,
+
+            DescribeInContext(ref mut effect, ref _in_args) => {
+                let mut output_clip = effect.new_output_clip()?;
+                output_clip.set_supported_components(&[ImageComponent::RGBA])?;
+
+                let mut input_clip = effect.new_simple_input_clip()?;
+                input_clip.set_supported_components(&[ImageComponent::RGBA])?;
+
+                fn define_plain_param(
+                    param_set: &mut ParamSetHandle,
+                    name: &str,
+                    default: f64,
+                    label: &'static str,
+                    parent: Option<&'static str>,
+                    min: Option<f64>,
+                    max: Option<f64>,
+                ) -> Result<()> {
+                    let mut param_props = param_set.param_define_double(name)?;
+
+                    param_props.set_double_type(ParamDoubleType::Plain)?;
+                    param_props.set_label(label)?;
+                    param_props.set_hint(label)?;
+                    param_props.set_default(default)?;
+                    param_props.set_display_min(min.unwrap_or(-100.0))?;
+                    param_props.set_display_max(max.unwrap_or(100.0))?;
+                    param_props.set_script_name(name)?;
+
+                    if let Some(parent) = parent {
+                        param_props.set_parent(parent)?;
+                    }
+
+                    Ok(())
+                }
+
+                let mut param_set = effect.parameter_set()?;
+
+                let mut param_props = param_set.param_define_group(PARAM_K)?;
+                param_props.set_hint("Camera matrix")?;
+                param_props.set_label("Camera matrix")?;
+
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_0_0,
+                    2004.559898061336,
+                    PARAM_K_0_0_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_0_1,
+                    0.0,
+                    PARAM_K_0_1_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_0_2,
+                    1920.0,
+                    PARAM_K_0_2_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_1_0,
+                    0.0,
+                    PARAM_K_1_0_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_1_1,
+                    1502.6021031882099,
+                    PARAM_K_1_1_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_1_2,
+                    1080.0,
+                    PARAM_K_1_2_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_2_0,
+                    0.0,
+                    PARAM_K_2_0_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_2_1,
+                    0.0,
+                    PARAM_K_2_1_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_K_2_2,
+                    1.0,
+                    PARAM_K_2_2_LABEL,
+                    Some(PARAM_K),
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+
+                let mut param_props = param_set.param_define_group(PARAM_CALIB_DIM)?;
+                param_props.set_hint("Camera calibration dimensions")?;
+                param_props.set_label("Camera calibration dimensions")?;
+
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_CALIB_WIDTH,
+                    3840.0,
+                    PARAM_CALIB_WIDTH_LABEL,
+                    None,
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_CALIB_HEIGHT,
+                    2160.0,
+                    PARAM_CALIB_HEIGHT_LABEL,
+                    None,
+                    Some(0.0),
+                    Some(10000.0),
+                )?;
+
+                let mut param_props = param_set.param_define_group(PARAM_DISTORTION)?;
+                param_props.set_hint("Distortion coefficients")?;
+                param_props.set_label("Distortion coefficients")?;
+
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_DISTORTION_0,
+                    -0.04614696357651861,
+                    PARAM_DISTORTION_0_LABEL,
+                    Some(PARAM_DISTORTION),
+                    Some(-0.2),
+                    Some(0.2),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_DISTORTION_1,
+                    0.027871487382326275,
+                    PARAM_DISTORTION_1_LABEL,
+                    Some(PARAM_DISTORTION),
+                    Some(-0.2),
+                    Some(0.2),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_DISTORTION_2,
+                    -0.04499706001247255,
+                    PARAM_DISTORTION_2_LABEL,
+                    Some(PARAM_DISTORTION),
+                    Some(-0.2),
+                    Some(0.2),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_DISTORTION_3,
+                    0.017210690844729263,
+                    PARAM_DISTORTION_3_LABEL,
+                    Some(PARAM_DISTORTION),
+                    Some(-0.2),
+                    Some(0.2),
+                )?;
+
+                let mut param_props = param_set.param_define_group(PARAM_CORRECTION_QUAT)?;
+                param_props.set_hint("Correction quaternion")?;
+                param_props.set_label("Correction quaternion")?;
+
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_CORRECTION_QUAT_W,
+                    0.9999816018844726,
+                    PARAM_CORRECTION_QUAT_W_LABEL,
+                    Some(PARAM_CORRECTION_QUAT),
+                    Some(-1.0),
+                    Some(1.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_CORRECTION_QUAT_X,
+                    0.005914784980046915,
+                    PARAM_CORRECTION_QUAT_X_LABEL,
+                    Some(PARAM_CORRECTION_QUAT),
+                    Some(-1.0),
+                    Some(1.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_CORRECTION_QUAT_Y,
+                    0.0012299438397453124,
+                    PARAM_CORRECTION_QUAT_Y_LABEL,
+                    Some(PARAM_CORRECTION_QUAT),
+                    Some(-1.0),
+                    Some(1.0),
+                )?;
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_CORRECTION_QUAT_Z,
+                    0.0005463051847160959,
+                    PARAM_CORRECTION_QUAT_Z_LABEL,
+                    Some(PARAM_CORRECTION_QUAT),
+                    Some(-1.0),
+                    Some(1.0),
+                )?;
+
+                define_plain_param(
+                    &mut param_set,
+                    PARAM_FOV_SCALE,
+                    1.0,
+                    PARAM_FOV_SCALE_LABEL,
+                    None,
+                    Some(0.5),
+                    Some(2.0),
+                )?;
+
+                param_set
+                    .param_define_page(PARAM_MAIN_NAME)?
+                    .set_children(&[
+                        PARAM_K_0_0,
+                        PARAM_K_0_1,
+                        PARAM_K_0_2,
+                        PARAM_K_1_0,
+                        PARAM_K_1_1,
+                        PARAM_K_1_2,
+                        PARAM_K_2_0,
+                        PARAM_K_2_1,
+                        PARAM_K_2_2,
+                        PARAM_CALIB_WIDTH,
+                        PARAM_CALIB_HEIGHT,
+                        PARAM_DISTORTION_0,
+                        PARAM_DISTORTION_1,
+                        PARAM_DISTORTION_2,
+                        PARAM_DISTORTION_3,
+                        PARAM_CORRECTION_QUAT_W,
+                        PARAM_CORRECTION_QUAT_X,
+                        PARAM_CORRECTION_QUAT_Y,
+                        PARAM_CORRECTION_QUAT_Z,
+                        PARAM_FOV_SCALE,
+                    ])?;
+
+                OK
+            }
+
+            Describe(ref mut effect) => {
+                let mut effect_properties: EffectDescriptor = effect.properties()?;
+                effect_properties.set_grouping("Warp")?;
+
+                effect_properties.set_label("Fisheye stabilizer")?;
+                effect_properties.set_short_label("Fisheye stabilizer")?;
+                effect_properties.set_long_label("Fisheye stabilizer")?;
+
+                effect_properties.set_supported_pixel_depths(&[BitDepth::Float])?;
+                effect_properties.set_supported_contexts(&[ImageEffectContext::Filter])?;
+                effect_properties.set_supports_tiles(false)?;
+
+                effect_properties.set_single_instance(false)?;
+                effect_properties.set_host_frame_threading(false)?;
+                effect_properties.set_render_thread_safety(ImageEffectRender::FullySafe)?;
+
+                OK
+            }
+
+            Load => OK,
+
             _ => REPLY_DEFAULT,
-		}
-	}
+        }
+    }
 }
 
 impl InstanceData {
-	fn get_per_frame_params(&self, time: Time) -> Result<PerFrameParams> {
-		let camera_matrix = [
+    fn get_per_frame_params(&self, time: Time) -> Result<PerFrameParams> {
+        let camera_matrix = [
             [
                 self.param_k[0][0].get_value_at_time(time)?,
                 self.param_k[0][1].get_value_at_time(time)?,
@@ -450,11 +597,14 @@ impl InstanceData {
             self.param_correction_quat[3].get_value_at_time(time)?,
         ];
 
+        let fov_scale = self.param_fov_scale.get_value_at_time(time)?;
+
         Ok(PerFrameParams {
             camera_matrix,
             distortion_coeffs,
             calibration_dim,
             correction_quat,
+            fov_scale,
         })
-	}
+    }
 }

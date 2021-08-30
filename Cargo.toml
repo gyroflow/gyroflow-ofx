@@ -12,13 +12,22 @@ path="src/lib.rs"
 
 [dependencies]
 ofx = "0.3"
-opencv = { version = "0.53", features = ["clang-runtime"] }
-cgmath = "0.18.0"
+nalgebra = "0.26"
+measure_time = "0.6"
+log = "0.4"
+itertools = "*"
+rayon = "*"
+ndarray = { version = "0.15", features = ["rayon"] }
+float-ord = "0.3.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
 
 [patch.crates-io]
 ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
 ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
-opencv = { git = "https://github.com/twistedfall/opencv-rust.git", rev = "0a7dd132789fe465e812d7d677ddefd3afb3884e" }
 
 [package.metadata.deb]
 maintainer = "Ilya Epifanov <elijah.epifanov@gmail.com>"

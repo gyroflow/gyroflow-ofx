@@ -11,12 +11,17 @@ jobs:
         with:
           profile: minimal
       - uses: Swatinem/rust-cache@v1
-      - run: sudo apt-get update -y && sudo apt-get install -yq build-essential clang libclang-dev libopencv-dev
       - uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release
-
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: Release.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   macos:
     runs-on: macOS-latest
     steps:
@@ -25,8 +30,6 @@ jobs:
         with:
           profile: minimal
       - uses: Swatinem/rust-cache@v1
-      - run: echo "DYLD_FALLBACK_LIBRARY_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/" >> $GITHUB_ENV
-      - run: brew install opencv
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -41,13 +44,6 @@ jobs:
           profile: minimal
           target: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v1
-      - run: choco install -y opencv ninja llvm
-      - run: echo "OPENCV_DIR=C:\tools\opencv\build" >> $env:GITHUB_ENV
-      - run: echo "OPENCV_LINK_PATHS=C:\tools\opencv\build\x64\vc15\lib" >> $env:GITHUB_ENV
-      - run: echo "OPENCV_INCLUDE_PATHS=C:\tools\opencv\build\include" >> $env:GITHUB_ENV
-      - run: echo "OPENCV_LINK_LIBS=opencv_world452" >> $env:GITHUB_ENV
-      - run: echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
       - uses: actions-rs/cargo@v1
         with:
           command: build
