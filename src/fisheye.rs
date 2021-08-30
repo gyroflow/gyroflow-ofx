@@ -81,11 +81,11 @@ pub fn undistort_rectify(
                     && iv_max < size[0] as i32
                 {
                     // common case
-                    let left_coeff = 1.0 - u_fract;
-                    let right_coeff = u_fract;
+                    let left_coeff = 1.0 - v_fract;
+                    let right_coeff = v_fract;
 
-                    let top_coeff = 1.0 - v_fract;
-                    let bottom_coeff = v_fract;
+                    let top_coeff = 1.0 - u_fract;
+                    let bottom_coeff = u_fract;
 
                     let left_top = src
                         .slice(s![iv_min, iu_min, ..])
