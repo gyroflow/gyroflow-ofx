@@ -1,6 +1,6 @@
 target/bundle-common/Info.plist: res/Info.plist Cargo.toml Cargo.lock
 	mkdir -p target/bundle-common
-	sed "s/####VERSION####/`cargo read-manifest | jq -r '.version'`/" $^ > $@
+	sed "s/####VERSION####/`cargo read-manifest | jq -r '.version'`/" res/Info.plist > $@
 
 target/gyroflow-ofx-linux.zip: target/release/libgyroflow_ofx.so LICENSE LICENSE-APACHE LICENSE-MIT README.md target/bundle-common/Info.plist Makefile
 	rm -Rf target/gyroflow-ofx-linux
