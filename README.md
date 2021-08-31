@@ -1,3 +1,28 @@
+# Fisheye correction + gyro stabilization OpenFX plugin
+
+* Works with stabilization data exported with [gyroflow](http://gyroflow.xyz/)
+* Allows you apply the stabilization right in your OpenFX-capable video editor
+
+## Installation
+
+Grab the archive for your OS from the [releases page](https://github.com/ilya-epifanov/gyroflow-ofx/releases).
+
+### Linux
+
+    mkdir -p /usr/OFX/Plugins
+    cd /usr/OFX/Plugins
+    sudo unzip ${PATH_TO}/gyroflow-ofx-linux.zip
+
+### MacOS
+
+Copy the `GyroFlow.ofx.bundle` from the archive into the `/Library/OFX/Plugins` directory.
+Create the directory if it doesn't exist yet.
+
+### Windows
+
+Copy the `GyroFlow.ofx.bundle` from the archive into the `C:\Program Files\Common Files\OFX\Plugins` folder.
+Create the folder if it doesn't exist yet.
+
 ## License
 
 Licensed under either of
