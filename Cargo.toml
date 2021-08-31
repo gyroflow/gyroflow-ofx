@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Ilya Epifanov <elijah.epifanov@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
+description = "GyroFlow OpenFX plugin"
 
 [lib]
 name="gyroflow_ofx"
@@ -28,18 +29,3 @@ codegen-units = 1
 [patch.crates-io]
 ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
 ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
-
-[package.metadata.deb]
-maintainer = "Ilya Epifanov <elijah.epifanov@gmail.com>"
-license-file = ["LICENSE", "0"]
-extended-description = """Gyroflow OpenFX plugin"""
-depends = "$auto"
-section = "video"
-priority = "optional"
-assets = [
-    ["target/release/libgyroflow_ofx.so", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/Linux-x86-64/GyroFlow.ofx", "755"],
-    ["res/Info.plist", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/Info.plist", "644"],
-    ["README.md", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/README.md", "644"],
-    ["LICENSE-APACHE", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/LICENSE-APACHE", "644"],
-    ["LICENSE-MIT", "usr/OFX/Plugins/GyroFlow.ofx.bundle/Contents/LICENSE-MIT", "644"],
-]
