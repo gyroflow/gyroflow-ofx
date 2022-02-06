@@ -1,9 +1,9 @@
 [package]
 name = "gyroflow-ofx"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Ilya Epifanov <elijah.epifanov@gmail.com>"]
-license = "MIT OR Apache-2.0"
-edition = "2018"
+license = "GPL-3.0-or-later AND (MIT OR Apache-2.0)"
+edition = "2021"
 description = "GyroFlow OpenFX plugin"
 
 [lib]
@@ -20,6 +20,9 @@ itertools = "*"
 rayon = "*"
 ndarray = { version = "0.15", features = ["rayon"] }
 float-ord = "0.3.2"
+lru = "0.7"
+gyroflow-core = { path = "gyroflow/src/core/", features = ["use-opencl"], version = "1.0.0-rc1" }
+serde_json = "1"
 
 [profile.release]
 opt-level = 3
@@ -27,5 +30,5 @@ lto = true
 codegen-units = 1
 
 [patch.crates-io]
-ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
-ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
+ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "79d1f4a006f60430d4333f2125d8b3236d6a9ccd" }
+ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "79d1f4a006f60430d4333f2125d8b3236d6a9ccd" }

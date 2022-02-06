@@ -122,7 +122,7 @@ Now adjust the `FOV scale` parameter to your liking.
 
 ## License
 
-Licensed under either of
+Version 0.1 of the plugin is licensed under either of
 
  * Apache License, Version 2.0
    ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
@@ -130,6 +130,11 @@ Licensed under either of
    ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
+Version 1.0 of the plugin is licensed under either of
+
+ * GNU General Public License version 3
+   ([LICENSE-GPL](LICENSE-GPL))
 
 ## Contribution
 
