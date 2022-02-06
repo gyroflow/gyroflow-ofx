@@ -6,27 +6,44 @@
 * Works with stabilization data exported with [gyroflow](http://gyroflow.xyz/)
 * Allows you apply the stabilization right in your OpenFX-capable video editor
 
-## Installation
+# Installation
 
 Grab the archive for your OS from the [releases page](https://github.com/ilya-epifanov/gyroflow-ofx/releases).
 
-### Linux
+## Linux
 
     mkdir -p /usr/OFX/Plugins
     cd /usr/OFX/Plugins
     sudo unzip ${PATH_TO}/gyroflow-ofx-linux.zip
 
-### MacOS
+## MacOS
 
 Copy the `GyroFlow.ofx.bundle` from the archive into the `/Library/OFX/Plugins` directory.
 Create the directory if it doesn't exist yet.
 
-### Windows
+## Windows
 
 Copy the `GyroFlow.ofx.bundle` from the archive into the `C:\Program Files\Common Files\OFX\Plugins` folder.
 Create the folder if it doesn't exist yet.
 
-## Usage
+# Usage
+
+## With Gyroflow 1.0
+
+### Export `.gyroflow` file in the Gyroflow app
+
+Click the `Export .gyroflow file (including gyro data)` in the Gyroflow app.
+
+### Basic plugin usage
+
+First you need to apply the plugin to the clip.
+In DaVinci Resolve you can do that by going to the Fusion tab and inserting the "Warp -> Gyroflow (1.0)" (or "Warp -> Fisheye stabilizer (1.0)") after the media input node.
+
+### Load the .gyroflow file
+
+In DaVinci Resolve Fusion, go to the `Gyroflow` (or `Fisheye stabilizer`) node settings. Select the `.gyroflow` file in the `Gyroflow file` entry.
+
+## With Gyroflow 0.x
 
 ### Export keyframes in the Gyroflow app
 
@@ -35,7 +52,7 @@ Instead of exporting video, click the `Export (hopefully) stabilized keyframes f
 ### Basic plugin usage
 
 First you need to apply the plugin to the clip.
-In DaVinci Resolve you can do that by going to the Fusion tab and inserting the "Warp -> Fisheye stabilizer" after media input node.
+In DaVinci Resolve you can do that by going to the Fusion tab and inserting the "Warp -> Fisheye stabilizer (0.x)" after media input node.
 You'll see some distortion correction being applied, probably not the correct one for your setup.
 
 ### Per-camera setup
@@ -112,7 +129,7 @@ Save this as a preset. In Fusion, right-click the node and `Settings -> Save As.
 
 You should see the distortion being corrected properly now (straight lines should still be straight no matter how close to the frame edge).
 
-### Load gyro data
+### Load the gyro data
 
 In DaVinci Resolve Fusion, go to the `Fisheye stabilizer` node settings again. Click the diamond button next to `Correction W/X/Y/Z` parameters in the `Correction quaternion` section. 
 Open the `Spline` pane.
@@ -120,7 +137,7 @@ Right click `Fisheyestabilizer*/Correction W` -> `Import Spline...`, load the co
 Voilà.
 Now adjust the `FOV scale` parameter to your liking.
 
-## License
+# License
 
 Version 0.1 of the plugin is licensed under either of
 
@@ -136,7 +153,7 @@ Version 1.0 of the plugin is licensed under either of
  * GNU General Public License version 3
    ([LICENSE-GPL](LICENSE-GPL))
 
-## Contribution
+# Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be

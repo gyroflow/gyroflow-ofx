@@ -221,9 +221,9 @@ impl Execute for FisheyeStabilizerPlugin {
                 let mut effect_properties: EffectDescriptor = effect.properties()?;
                 effect_properties.set_grouping("Warp")?;
 
-                effect_properties.set_label("Fisheye stabilizer (1.0)")?;
-                effect_properties.set_short_label("Fisheye stabilizer")?;
-                effect_properties.set_long_label("Fisheye stabilizer (for gyroflow >= 1.0)")?;
+                effect_properties.set_label("Gyroflow (1.0)")?;
+                effect_properties.set_short_label("Gyroflow")?;
+                effect_properties.set_long_label("Gyroflow (>= 1.0)")?;
 
                 effect_properties.set_supported_pixel_depths(&[BitDepth::Float])?;
                 effect_properties.set_supported_contexts(&[ImageEffectContext::Filter])?;
