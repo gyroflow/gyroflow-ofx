@@ -21,7 +21,7 @@ rayon = "*"
 ndarray = { version = "0.15", features = ["rayon"] }
 float-ord = "0.3.2"
 lru = "0.7"
-gyroflow-core = { path = "gyroflow/src/core/", features = ["use-opencl"], version = "1.0.0-rc1" }
+gyroflow-core = { path = "gyroflow/src/core/", default-features = false, features = ["use-opencl"], version = "1.0.0-rc1" }
 serde_json = "1"
 
 [profile.release]
