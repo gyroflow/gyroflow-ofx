@@ -1015,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "gyroflow-ofx"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "float-ord",
  "gyroflow-core",
