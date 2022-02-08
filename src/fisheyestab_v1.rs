@@ -13,8 +13,7 @@ plugin_module!(
 );
 
 #[derive(Default)]
-struct FisheyeStabilizerPlugin {
-}
+struct FisheyeStabilizerPlugin {}
 
 impl FisheyeStabilizerPlugin {
     pub fn new() -> FisheyeStabilizerPlugin {
@@ -27,13 +26,16 @@ struct InstanceData {
     output_clip: ClipInstance,
 
     param_gyrodata: ParamHandle<String>,
-    gyrodata: LruCache<String, Arc<StabilizationManager::<undistortion::RGBAf>>>,
+    gyrodata: LruCache<String, Arc<StabilizationManager<undistortion::RGBAf>>>,
 }
 
 impl InstanceData {
-    fn gyrodata(&mut self, width: usize, height: usize) -> Result<Arc<StabilizationManager::<undistortion::RGBAf>>> {
+    fn gyrodata(
+        &mut self,
+        width: usize,
+        height: usize,
+    ) -> Result<Arc<StabilizationManager<undistortion::RGBAf>>> {
         let gyrodata_filename = self.param_gyrodata.get_value()?;
-        error!("filename: {gyrodata_filename}");
         let gyrodata = if let Some(gyrodata) = self.gyrodata.get(&gyrodata_filename) {
             gyrodata.clone()
         } else {
@@ -44,12 +46,30 @@ impl InstanceData {
             })?;
 
             if let Some(vid_info) = gyrodata_json.get("video_info") {
-                let duration_ms = vid_info.get("duration_ms").and_then(|x| x.as_f64()).unwrap_or_default();
-                let fps = vid_info.get("fps").and_then(|x| x.as_f64()).unwrap_or_default();
-                let vfr_fps = vid_info.get("vfr_fps").and_then(|x| x.as_f64()).unwrap_or_default();
-                let num_frames = vid_info.get("num_frames").and_then(|x| x.as_u64()).unwrap_or_default() as usize;
-                let width = vid_info.get("width").and_then(|x| x.as_u64()).unwrap_or_default() as usize;
-                let height = vid_info.get("height").and_then(|x| x.as_u64()).unwrap_or_default() as usize;
+                let duration_ms = vid_info
+                    .get("duration_ms")
+                    .and_then(|x| x.as_f64())
+                    .unwrap_or_default();
+                let fps = vid_info
+                    .get("fps")
+                    .and_then(|x| x.as_f64())
+                    .unwrap_or_default();
+                let vfr_fps = vid_info
+                    .get("vfr_fps")
+                    .and_then(|x| x.as_f64())
+                    .unwrap_or_default();
+                let num_frames = vid_info
+                    .get("num_frames")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default() as usize;
+                let width = vid_info
+                    .get("width")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default() as usize;
+                let height = vid_info
+                    .get("height")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default() as usize;
 
                 let mut params = gyrodata.params.write();
                 params.framebuffer_inverted = true;
@@ -65,12 +85,27 @@ impl InstanceData {
             }
 
             if let Some(serde_json::Value::Object(vid_info)) = gyrodata_json.get("stabilization") {
-                let fov = vid_info.get("fov").and_then(|x| x.as_f64()).unwrap_or_default();
-                let method = vid_info.get("method").and_then(|x| x.as_str()).unwrap_or_default();
-                let smoothing_params = vid_info.get("smoothing_params").and_then(|x| x.as_array()).map(|x| &x[..]).unwrap_or(&[]);
+                let fov = vid_info
+                    .get("fov")
+                    .and_then(|x| x.as_f64())
+                    .unwrap_or_default();
+                let method = vid_info
+                    .get("method")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default();
+                let smoothing_params = vid_info
+                    .get("smoothing_params")
+                    .and_then(|x| x.as_array())
+                    .map(|x| &x[..])
+                    .unwrap_or(&[]);
 
                 let known_methods = gyrodata.get_smoothing_algs();
-                let method_ix = known_methods.iter().enumerate().find(|(_, m)| method == m.as_str()).map(|(ix, _)| ix).unwrap_or_default();
+                let method_ix = known_methods
+                    .iter()
+                    .enumerate()
+                    .find(|(_, m)| method == m.as_str())
+                    .map(|(ix, _)| ix)
+                    .unwrap_or_default();
 
                 let mut smoothing = gyrodata.smoothing.write();
                 gyrodata.params.write().fov = fov;
@@ -87,15 +122,20 @@ impl InstanceData {
             }
 
             if let Some(serde_json::Value::Object(offsets)) = gyrodata_json.get("offsets") {
-                gyrodata.gyro.write().offsets = offsets.iter().map(|(k, v)| {
-                    (k.parse().unwrap(), v.as_f64().unwrap_or_default())
-                }).collect();
+                gyrodata.gyro.write().offsets = offsets
+                    .iter()
+                    .map(|(k, v)| (k.parse().unwrap(), v.as_f64().unwrap_or_default()))
+                    .collect();
             }
 
             gyrodata.recompute_blocking();
 
-            self.gyrodata.put(gyrodata_filename.to_owned(), Arc::new(gyrodata));
-            self.gyrodata.get(&gyrodata_filename).map(Arc::clone).ok_or(Error::UnknownError)?
+            self.gyrodata
+                .put(gyrodata_filename.to_owned(), Arc::new(gyrodata));
+            self.gyrodata
+                .get(&gyrodata_filename)
+                .map(Arc::clone)
+                .ok_or(Error::UnknownError)?
         };
 
         {
@@ -113,8 +153,7 @@ impl InstanceData {
     }
 }
 
-struct PerFrameParams {
-}
+struct PerFrameParams {}
 
 const PARAM_MAIN_NAME: &str = "Main";
 
@@ -143,10 +182,13 @@ impl Execute for FisheyeStabilizerPlugin {
                 let mut dst_buf = dst.data();
 
                 let processed = {
-                    let stab = instance_data.gyrodata(dst_buf.dimensions().0 as usize, dst_buf.dimensions().1 as usize)?;
+                    let stab = instance_data.gyrodata(
+                        dst_buf.dimensions().0 as usize,
+                        dst_buf.dimensions().1 as usize,
+                    )?;
                     let stab_params = stab.params.read();
                     let fps = stab_params.fps;
-                    let timestamp_us = (time / fps * 1_000_000.0) as i64; 
+                    let timestamp_us = (time / fps * 1_000_000.0) as i64;
 
                     stab.process_pixels(
                         timestamp_us,
@@ -156,8 +198,12 @@ impl Execute for FisheyeStabilizerPlugin {
                         dst_buf.dimensions().0 as usize,
                         dst_buf.dimensions().1 as usize,
                         dst_buf.stride_bytes().abs() as usize,
-                        unsafe { std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes()) },
-                        unsafe { std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes()) }
+                        unsafe {
+                            std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes())
+                        },
+                        unsafe {
+                            std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes())
+                        },
                     )
                 };
 
@@ -210,9 +256,7 @@ impl Execute for FisheyeStabilizerPlugin {
 
                 param_set
                     .param_define_page(PARAM_MAIN_NAME)?
-                    .set_children(&[
-                        PARAM_GYRODATA,
-                    ])?;
+                    .set_children(&[PARAM_GYRODATA])?;
 
                 OK
             }
@@ -246,7 +290,6 @@ impl Execute for FisheyeStabilizerPlugin {
 impl InstanceData {
     #[allow(unused)]
     fn get_per_frame_params(&self) -> Result<PerFrameParams> {
-        Ok(PerFrameParams {
-        })
+        Ok(PerFrameParams {})
     }
 }
