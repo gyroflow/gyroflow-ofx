@@ -2,7 +2,7 @@
 name = "gyroflow-ofx"
 version = "1.0.1"
 authors = ["Ilya Epifanov <elijah.epifanov@gmail.com>"]
-license = "GPL-3.0-or-later AND (MIT OR Apache-2.0)"
+license = "GPL-3.0-or-later"
 edition = "2021"
 description = "GyroFlow OpenFX plugin"
 
@@ -13,13 +13,9 @@ path="src/lib.rs"
 
 [dependencies]
 ofx = "0.3"
-nalgebra = "0.26"
 measure_time = "0.6"
 log = "0.4"
 itertools = "*"
-rayon = "*"
-ndarray = { version = "0.15", features = ["rayon"] }
-float-ord = "0.3.2"
 lru = "0.7"
 gyroflow-core = { path = "gyroflow/src/core/", default-features = false, version = "1.0.0-rc1" }
 serde_json = "1"
