@@ -265,7 +265,7 @@ impl Execute for FisheyeStabilizerPlugin {
                 let mut effect_properties: EffectDescriptor = effect.properties()?;
                 effect_properties.set_grouping("Warp")?;
 
-                effect_properties.set_label("Gyroflow (1.0)")?;
+                effect_properties.set_label("Gyroflow")?;
                 effect_properties.set_short_label("Gyroflow")?;
                 effect_properties.set_long_label("Gyroflow (>= 1.0)")?;
 

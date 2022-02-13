@@ -46,7 +46,8 @@ dependencies = [
 [[package]]
 name = "ahrs"
 version = "0.5.0"
-source = "git+https://github.com/jmagnuson/ahrs-rs.git#367e3e87c212d1363607e39d45f64c5fc68fd522"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dce5b6279fad0a36b3ef4fd938fb6b2751a8899ff8275fb9aba9a25345ca9992"
 dependencies = [
  "nalgebra",
  "num-traits 0.2.14",
@@ -957,7 +958,7 @@ dependencies = [
 
 [[package]]
 name = "gyroflow-core"
-version = "1.0.0-rc1"
+version = "1.0.0-rc3"
 dependencies = [
  "ahrs",
  "akaze",
