@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gyroflow_core::{undistortion, StabilizationManager};
+use gyroflow_core::{StabilizationManager, stabilization::RGBAf};
 use lru::LruCache;
 use measure_time::*;
 use ofx::*;
@@ -8,7 +8,7 @@ use ofx::*;
 plugin_module!(
     "nl.smslv.gyroflowofx.fisheyestab_v1",
     ApiVersion(1),
-    PluginVersion(1, 0),
+    PluginVersion(1, 1),
     FisheyeStabilizerPlugin::new
 );
 
@@ -26,7 +26,7 @@ struct InstanceData {
     output_clip: ClipInstance,
 
     param_gyrodata: ParamHandle<String>,
-    gyrodata: LruCache<String, Arc<StabilizationManager<undistortion::RGBAf>>>,
+    gyrodata: LruCache<String, Arc<StabilizationManager<RGBAf>>>,
 }
 
 impl InstanceData {
@@ -34,18 +34,20 @@ impl InstanceData {
         &mut self,
         width: usize,
         height: usize,
-    ) -> Result<Arc<StabilizationManager<undistortion::RGBAf>>> {
+    ) -> Result<Arc<StabilizationManager<RGBAf>>> {
         let gyrodata_filename = self.param_gyrodata.get_value()?;
         let gyrodata = if let Some(gyrodata) = self.gyrodata.get(&gyrodata_filename) {
             gyrodata.clone()
         } else {
             let gyrodata = StabilizationManager::default();
-            let gyrodata_json = gyrodata.import_gyroflow(&gyrodata_filename).map_err(|e| {
+            let gyrodata_json = gyrodata.import_gyroflow_file(&gyrodata_filename, true).map_err(|e| {
                 error!("load_gyro_data error: {}", &e);
                 Error::UnknownError
             })?;
 
-            if let Some(vid_info) = gyrodata_json.get("video_info") {
+
+            let vid_info = gyrodata_json.get("video_info").unwrap();
+            {
                 let duration_ms = vid_info
                     .get("duration_ms")
                     .and_then(|x| x.as_f64())
@@ -62,11 +64,11 @@ impl InstanceData {
                     .get("num_frames")
                     .and_then(|x| x.as_u64())
                     .unwrap_or_default() as usize;
-                let width = vid_info
+                let original_width = vid_info
                     .get("width")
                     .and_then(|x| x.as_u64())
                     .unwrap_or_default() as usize;
-                let height = vid_info
+                let original_height = vid_info
                     .get("height")
                     .and_then(|x| x.as_u64())
                     .unwrap_or_default() as usize;
@@ -81,8 +83,9 @@ impl InstanceData {
                 } else {
                     None
                 };
-                params.video_size = (width, height);
-            }
+                params.size = (original_width, original_height);
+                params.output_size = (original_width, original_height);
+            };
 
             if let Some(serde_json::Value::Object(vid_info)) = gyrodata_json.get("stabilization") {
                 let fov = vid_info
@@ -115,7 +118,7 @@ impl InstanceData {
                     (|| -> Option<()> {
                         let name = param.get("name").and_then(|x| x.as_str())?;
                         let value = param.get("value").and_then(|x| x.as_f64())?;
-                        smoothing.current().set_parameter(name, value);
+                        smoothing.current_mut().set_parameter(name, value);
                         Some(())
                     })();
                 }
@@ -192,12 +195,16 @@ impl Execute for FisheyeStabilizerPlugin {
 
                     stab.process_pixels(
                         timestamp_us,
-                        src_buf.dimensions().0 as usize,
-                        src_buf.dimensions().1 as usize,
-                        src_buf.stride_bytes().abs() as usize,
-                        dst_buf.dimensions().0 as usize,
-                        dst_buf.dimensions().1 as usize,
-                        dst_buf.stride_bytes().abs() as usize,
+                        (
+                            src_buf.dimensions().0 as usize,
+                            src_buf.dimensions().1 as usize,
+                            src_buf.stride_bytes().abs() as usize
+                        ),
+                        (
+                            dst_buf.dimensions().0 as usize,
+                            dst_buf.dimensions().1 as usize,
+                            dst_buf.stride_bytes().abs() as usize
+                        ),
                         unsafe {
                             std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes())
                         },
@@ -267,7 +274,7 @@ impl Execute for FisheyeStabilizerPlugin {
 
                 effect_properties.set_label("Gyroflow")?;
                 effect_properties.set_short_label("Gyroflow")?;
-                effect_properties.set_long_label("Gyroflow (>= 1.0)")?;
+                effect_properties.set_long_label("Gyroflow")?;
 
                 effect_properties.set_supported_pixel_depths(&[BitDepth::Float])?;
                 effect_properties.set_supported_contexts(&[ImageEffectContext::Filter])?;
