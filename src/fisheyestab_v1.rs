@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use gyroflow_core::{StabilizationManager, stabilization::RGBAf};
 use lru::LruCache;
@@ -40,99 +41,10 @@ impl InstanceData {
             gyrodata.clone()
         } else {
             let gyrodata = StabilizationManager::default();
-            let gyrodata_json = gyrodata.import_gyroflow_file(&gyrodata_filename, true).map_err(|e| {
+            gyrodata.import_gyroflow_file(&gyrodata_filename, true, |_|(), Arc::new(AtomicBool::new(false))).map_err(|e| {
                 error!("load_gyro_data error: {}", &e);
                 Error::UnknownError
             })?;
-
-
-            let vid_info = gyrodata_json.get("video_info").unwrap();
-            {
-                let duration_ms = vid_info
-                    .get("duration_ms")
-                    .and_then(|x| x.as_f64())
-                    .unwrap_or_default();
-                let fps = vid_info
-                    .get("fps")
-                    .and_then(|x| x.as_f64())
-                    .unwrap_or_default();
-                let vfr_fps = vid_info
-                    .get("vfr_fps")
-                    .and_then(|x| x.as_f64())
-                    .unwrap_or_default();
-                let num_frames = vid_info
-                    .get("num_frames")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or_default() as usize;
-                let original_width = vid_info
-                    .get("width")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or_default() as usize;
-                let original_height = vid_info
-                    .get("height")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or_default() as usize;
-
-                let mut params = gyrodata.params.write();
-                params.framebuffer_inverted = true;
-                params.frame_count = num_frames;
-                params.fps = fps;
-                params.duration_ms = duration_ms;
-                params.fps_scale = if (vfr_fps - fps).abs() > 0.001 {
-                    Some(vfr_fps / fps)
-                } else {
-                    None
-                };
-                params.size = (original_width, original_height);
-                params.output_size = (original_width, original_height);
-            };
-
-            if let Some(serde_json::Value::Object(vid_info)) = gyrodata_json.get("stabilization") {
-                let fov = vid_info
-                    .get("fov")
-                    .and_then(|x| x.as_f64())
-                    .unwrap_or_default();
-                let method = vid_info
-                    .get("method")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or_default();
-                let smoothing_params = vid_info
-                    .get("smoothing_params")
-                    .and_then(|x| x.as_array())
-                    .map(|x| &x[..])
-                    .unwrap_or(&[]);
-
-                let known_methods = gyrodata.get_smoothing_algs();
-                let method_ix = known_methods
-                    .iter()
-                    .enumerate()
-                    .find(|(_, m)| method == m.as_str())
-                    .map(|(ix, _)| ix)
-                    .unwrap_or_default();
-
-                let mut smoothing = gyrodata.smoothing.write();
-                gyrodata.params.write().fov = fov;
-                smoothing.set_current(method_ix);
-
-                for param in smoothing_params {
-                    (|| -> Option<()> {
-                        let name = param.get("name").and_then(|x| x.as_str())?;
-                        let value = param.get("value").and_then(|x| x.as_f64())?;
-                        smoothing.current_mut().set_parameter(name, value);
-                        Some(())
-                    })();
-                }
-            }
-
-            if let Some(serde_json::Value::Object(offsets)) = gyrodata_json.get("offsets") {
-                gyrodata.gyro.write().offsets = offsets
-                    .iter()
-                    .map(|(k, v)| (k.parse().unwrap(), v.as_f64().unwrap_or_default()))
-                    .collect();
-            }
-
-            gyrodata.recompute_blocking();
-
             self.gyrodata
                 .put(gyrodata_filename.to_owned(), Arc::new(gyrodata));
             self.gyrodata
@@ -152,6 +64,7 @@ impl InstanceData {
                 gyrodata.set_output_size(width, height);
             }
         }
+
         Ok(gyrodata)
     }
 }
