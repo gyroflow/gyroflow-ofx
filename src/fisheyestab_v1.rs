@@ -9,7 +9,7 @@ use ofx::*;
 plugin_module!(
     "nl.smslv.gyroflowofx.fisheyestab_v1",
     ApiVersion(1),
-    PluginVersion(1, 1),
+    PluginVersion(1, 2),
     FisheyeStabilizerPlugin::new
 );
 
