@@ -35,9 +35,11 @@ impl InstanceData {
         &mut self,
         width: usize,
         height: usize,
+        stride: usize,
     ) -> Result<Arc<StabilizationManager<RGBAf>>> {
         let gyrodata_filename = self.param_gyrodata.get_value()?;
-        let gyrodata = if let Some(gyrodata) = self.gyrodata.get(&gyrodata_filename) {
+        let key = format!("{gyrodata_filename}{width}{height}{stride}");
+        let gyrodata = if let Some(gyrodata) = self.gyrodata.get(&key) {
             gyrodata.clone()
         } else {
             let gyrodata = StabilizationManager::default();
@@ -45,33 +47,55 @@ impl InstanceData {
                 error!("load_gyro_data error: {}", &e);
                 Error::UnknownError
             })?;
+            gyrodata.params.write().framebuffer_inverted = true;
 
-            gyrodata.recompute_undistortion();
+            let (video_size, bg) = {
+                let params = gyrodata.params.read();
+                (params.video_size, params.background)
+            };
+
+            let org_ratio = video_size.0 as f64 / video_size.1 as f64;
+
+            gyrodata.set_size(width, height);
+            gyrodata.set_output_size(width, height);
+
+            let src_rect = Self::get_center_rect(width, height, org_ratio);
+            gyrodata.params.write().size = (src_rect.2, src_rect.3);
+            gyrodata.stabilization.write().init_size(bg, (src_rect.2, src_rect.3, stride), (width, height, stride));
+
+            gyrodata.invalidate_smoothing();
+            gyrodata.invalidate_zooming();
             gyrodata.recompute_blocking();
 
             self.gyrodata
-                .put(gyrodata_filename.to_owned(), Arc::new(gyrodata));
+                .put(key.to_owned(), Arc::new(gyrodata));
             self.gyrodata
-                .get(&gyrodata_filename)
+                .get(&key)
                 .map(Arc::clone)
                 .ok_or(Error::UnknownError)?
         };
 
-        {
-            let (size, output_size) = {
-                let params = gyrodata.params.read();
-                (params.size, params.output_size)
-            };
-
-            if size != (width, height) || output_size != (width, height) {
-                gyrodata.set_size(width, height);
-                gyrodata.set_output_size(width, height);
-                gyrodata.recompute_undistortion();
-                gyrodata.recompute_blocking();
-            }
-        }
-
         Ok(gyrodata)
+    }
+
+    fn get_center_rect(width: usize, height: usize, org_ratio: f64) -> (usize, usize, usize, usize) {
+        // If aspect ratio is different
+        if ((width as f64 / height as f64) - org_ratio).abs() > 0.1 {
+            // Get center rect of original aspect ratio
+            let rect = if width > height {
+                ((width as f64 / org_ratio).round() as usize, height)
+            } else {
+                (width, (height as f64 / org_ratio).round() as usize)
+            };
+            (
+                (width - rect.0) / 2, // x
+                (height - rect.1) / 2, // y
+                rect.0, // width
+                rect.1 // height
+            )
+        } else {
+            (0, 0, width, height)
+        }
     }
 }
 
@@ -104,19 +128,31 @@ impl Execute for FisheyeStabilizerPlugin {
                 let mut dst_buf = dst.data();
 
                 let processed = {
+                    let width = src_buf.dimensions().0 as usize;
+                    let height = src_buf.dimensions().1 as usize;
+
                     let stab = instance_data.gyrodata(
-                        dst_buf.dimensions().0 as usize,
-                        dst_buf.dimensions().1 as usize,
+                        width,
+                        height,
+                        src_buf.stride_bytes().abs() as usize
                     )?;
                     let stab_params = stab.params.read();
                     let fps = stab_params.fps;
                     let timestamp_us = (time / fps * 1_000_000.0) as i64;
 
+                    let org_ratio = stab_params.video_size.0 as f64 / stab_params.video_size.1 as f64;
+
+                    let src_rect = InstanceData::get_center_rect(width, height, org_ratio);
+
+                    drop(stab_params);
+
+                    let src_offset = src_rect.1 as isize * src_buf.stride_bytes() + src_rect.0 as isize * 4 * 4;
+
                     stab.process_pixels(
                         timestamp_us,
                         (
-                            src_buf.dimensions().0 as usize,
-                            src_buf.dimensions().1 as usize,
+                            src_rect.2,
+                            src_rect.3,
                             src_buf.stride_bytes().abs() as usize
                         ),
                         (
@@ -125,7 +161,8 @@ impl Execute for FisheyeStabilizerPlugin {
                             dst_buf.stride_bytes().abs() as usize
                         ),
                         unsafe {
-                            std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes())
+                            // TODO: length needs to subtract src_offset, but this fails in processing kernel to verify buffer size (because stride > width)
+                            std::slice::from_raw_parts_mut(src_buf.ptr_mut(src_offset), src_buf.bytes())
                         },
                         unsafe {
                             std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes())
@@ -195,6 +232,7 @@ impl Execute for FisheyeStabilizerPlugin {
                 effect_properties.set_short_label("Gyroflow")?;
                 effect_properties.set_long_label("Gyroflow")?;
 
+                // effect_properties.set_supported_pixel_depths(&[BitDepth::Byte, BitDepth::Short, BitDepth::Float])?;
                 effect_properties.set_supported_pixel_depths(&[BitDepth::Float])?;
                 effect_properties.set_supported_contexts(&[ImageEffectContext::Filter])?;
                 effect_properties.set_supports_tiles(false)?;
