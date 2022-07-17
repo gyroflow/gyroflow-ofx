@@ -45,6 +45,10 @@ impl InstanceData {
                 error!("load_gyro_data error: {}", &e);
                 Error::UnknownError
             })?;
+
+            gyrodata.recompute_undistortion();
+            gyrodata.recompute_blocking();
+
             self.gyrodata
                 .put(gyrodata_filename.to_owned(), Arc::new(gyrodata));
             self.gyrodata
@@ -62,6 +66,8 @@ impl InstanceData {
             if size != (width, height) || output_size != (width, height) {
                 gyrodata.set_size(width, height);
                 gyrodata.set_output_size(width, height);
+                gyrodata.recompute_undistortion();
+                gyrodata.recompute_blocking();
             }
         }
 
