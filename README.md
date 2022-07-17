@@ -20,6 +20,8 @@ Grab the archive for your OS from the [releases page](https://github.com/gyroflo
 
 Copy the `GyroFlow.ofx.bundle` from the archive into the `/Library/OFX/Plugins` directory.
 Create the directory if it doesn't exist yet.
+You will probably need to open System Preferences -> Security and Allow plugin from unknown developer. Then restart Resolve.
+Then in Resolve, make sure to go to Preferences -> Video plugins and enable GyroFlow.ofx.bundle.
 
 ## Windows
 
@@ -37,11 +39,12 @@ Click the `Export .gyroflow file (including gyro data)` in the Gyroflow app.
 ### Basic plugin usage
 
 First you need to apply the plugin to the clip.
-In DaVinci Resolve you can do that by going to the Fusion tab and inserting the "Warp -> Gyroflow (1.0)" (or "Warp -> Fisheye stabilizer (1.0)") after the media input node.
+In DaVinci Resolve you can do that by going to the Fusion tab and inserting the "Warp -> Gyroflow" after the media input node.
+You can also apply the plugin on the Edit or Color page - it should work faster this way.
 
 ### Load the .gyroflow file
 
-In DaVinci Resolve Fusion, go to the `Gyroflow` (or `Fisheye stabilizer`) node settings. Select the `.gyroflow` file in the `Gyroflow file` entry.
+In DaVinci Resolve Fusion, go to the `Gyroflow` node settings. Select the `.gyroflow` file in the `Gyroflow file` entry.
 
 ## With Gyroflow 0.x
 
