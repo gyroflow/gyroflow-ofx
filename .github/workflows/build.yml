@@ -46,6 +46,9 @@ jobs:
           profile: minimal
       - uses: Swatinem/rust-cache@v1
 
+      - name: Add rust target
+        run: rustup target add aarch64-apple-darwin
+
       - uses: lukka/get-cmake@latest
       - uses: lukka/run-vcpkg@v10
         with:
