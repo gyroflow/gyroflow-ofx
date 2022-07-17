@@ -10,11 +10,11 @@ target/gyroflow-ofx-linux.zip: target/release/libgyroflow_ofx.so LICENSE README.
 	cp target/bundle-common/Info.plist LICENSE README.md target/gyroflow-ofx-linux/GyroFlow.ofx.bundle/Contents/
 	cd target/gyroflow-ofx-linux && zip -r ../gyroflow-ofx-linux.zip .
 
-target/gyroflow-ofx-macosx.zip: target/release/libgyroflow_ofx.dylib LICENSE README.md target/bundle-common/Info.plist Makefile
+target/gyroflow-ofx-macosx.zip: target/x86_64-apple-darwin/release/libgyroflow_ofx.dylib target/aarch64-apple-darwin/release/libgyroflow_ofx.dylib LICENSE README.md target/bundle-common/Info.plist Makefile
 	rm -Rf target/gyroflow-ofx-macosx
 	rm -f target/gyroflow-ofx-macosx.zip
-	mkdir -p target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS-x86-64
-	cp target/release/libgyroflow_ofx.dylib target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS-x86-64/GyroFlow.ofx
+	mkdir -p target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS
+	lipo target/{x86_64,aarch64}-apple-darwin/release/libgyroflow_ofx.dylib -create -output target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS/GyroFlow.ofx
 	cp target/bundle-common/Info.plist LICENSE README.md target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/
 	cd target/gyroflow-ofx-macosx && zip -r ../gyroflow-ofx-macosx.zip .
 
