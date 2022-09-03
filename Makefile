@@ -17,12 +17,12 @@ target/gyroflow-ofx-macosx.zip: target/x86_64-apple-darwin/release/libgyroflow_o
 	lipo target/{x86_64,aarch64}-apple-darwin/release/libgyroflow_ofx.dylib -create -output target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS/GyroFlow.ofx
 	cp target/bundle-common/Info.plist LICENSE README.md target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/
 
-    codesign -vvvv --strict --options=runtime --timestamp --force -s ${SIGNING_FINGERPRINT} target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS/GyroFlow.ofx
+	codesign -vvvv --strict --options=runtime --timestamp --force -s ${SIGNING_FINGERPRINT} target/gyroflow-ofx-macosx/GyroFlow.ofx.bundle/Contents/MacOS/GyroFlow.ofx
 
 	cd target/gyroflow-ofx-macosx && zip -r ../gyroflow-ofx-macosx.zip .
 
-    codesign -vvvv --strict --options=runtime --timestamp --force -s ${SIGNING_FINGERPRINT} ../gyroflow-ofx-macosx.zip
-    codesign -vvvv --deep --verify ../gyroflow-ofx-macosx.zip
+	codesign -vvvv --strict --options=runtime --timestamp --force -s ${SIGNING_FINGERPRINT} ../gyroflow-ofx-macosx.zip
+	codesign -vvvv --deep --verify ../gyroflow-ofx-macosx.zip
 
 target/gyroflow-ofx-windows.zip: target/release/gyroflow_ofx.dll LICENSE README.md target/bundle-common/Info.plist Makefile
 	rm -Rf target/gyroflow-ofx-windows
