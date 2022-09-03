@@ -74,6 +74,8 @@ jobs:
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
       - run: make target/gyroflow-ofx-macosx.zip
+        env:
+          SIGNING_FINGERPRINT: ${{ secrets.MACOS_CERTIFICATE_FINGERPRINT }}
       - name: Notarize and staple release build
         run: |
           npx notarize-cli --file target/gyroflow-ofx-macosx.zip --bundle-id xyz.gyroflow.ofx --asc-provider="${{ secrets.MACOS_TEAM }}" --username="${{ secrets.MACOS_ACCOUNT_USER }}" --password="${{ secrets.MACOS_ACCOUNT_PASS }}"
@@ -86,7 +88,6 @@ jobs:
           files: target/gyroflow-ofx-macosx.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SIGNING_FINGERPRINT: ${{ secrets.MACOS_CERTIFICATE_FINGERPRINT }}
 
 
   windows:
