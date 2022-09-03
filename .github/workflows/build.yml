@@ -67,7 +67,18 @@ jobs:
           command: build
           args: --release --target aarch64-apple-darwin
 
+      - name: Install Mac certificate
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
+          p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+
       - run: make target/gyroflow-ofx-macosx.zip
+      - name: Notarize and staple release build
+        run: |
+          npx notarize-cli --file target/gyroflow-ofx-macosx.zip --bundle-id xyz.gyroflow.ofx --asc-provider="${{ secrets.MACOS_TEAM }}" --username="${{ secrets.MACOS_ACCOUNT_USER }}" --password="${{ secrets.MACOS_ACCOUNT_PASS }}"
+          xcrun stapler staple --verbose target/gyroflow-ofx-macosx.zip
+
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
@@ -75,6 +86,8 @@ jobs:
           files: target/gyroflow-ofx-macosx.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNING_FINGERPRINT: ${{ secrets.MACOS_CERTIFICATE_FINGERPRINT }}
+
 
   windows:
     runs-on: windows-latest

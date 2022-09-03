@@ -13,11 +13,12 @@ path="src/lib.rs"
 
 [dependencies]
 ofx = "0.3"
-measure_time = "0.6"
+measure_time = "0.8"
 log = "0.4"
-itertools = "*"
+itertools = "0.10"
 lru = "0.7"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow", default-features = false, rev = "eba7b94" }
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "03b8141" }
+#gyroflow-core = { path = "../gyroflow/src/core", default-features = false }
 serde_json = "1"
 
 [features]

@@ -56,15 +56,12 @@ impl InstanceData {
 
             let org_ratio = video_size.0 as f64 / video_size.1 as f64;
 
-            gyrodata.set_size(width, height);
-            gyrodata.set_output_size(width, height);
-
             let src_rect = Self::get_center_rect(width, height, org_ratio);
-            gyrodata.params.write().size = (src_rect.2, src_rect.3);
+            gyrodata.set_size(src_rect.2, src_rect.3);
+            gyrodata.set_output_size(width, height);
             gyrodata.stabilization.write().init_size(bg, (src_rect.2, src_rect.3, stride), (width, height, stride));
 
             gyrodata.invalidate_smoothing();
-            gyrodata.invalidate_zooming();
             gyrodata.recompute_blocking();
 
             self.gyrodata
@@ -80,12 +77,13 @@ impl InstanceData {
 
     fn get_center_rect(width: usize, height: usize, org_ratio: f64) -> (usize, usize, usize, usize) {
         // If aspect ratio is different
-        if ((width as f64 / height as f64) - org_ratio).abs() > 0.1 {
+        let new_ratio = width as f64 / height as f64;
+        if (new_ratio - org_ratio).abs() > 0.1 {
             // Get center rect of original aspect ratio
-            let rect = if width > height {
-                ((width as f64 / org_ratio).round() as usize, height)
+            let rect = if new_ratio > org_ratio {
+                ((height as f64 * org_ratio).round() as usize, height)
             } else {
-                (width, (height as f64 / org_ratio).round() as usize)
+                (width, (width as f64 / org_ratio).round() as usize)
             };
             (
                 (width - rect.0) / 2, // x
@@ -161,8 +159,7 @@ impl Execute for FisheyeStabilizerPlugin {
                             dst_buf.stride_bytes().abs() as usize
                         ),
                         unsafe {
-                            // TODO: length needs to subtract src_offset, but this fails in processing kernel to verify buffer size (because stride > width)
-                            std::slice::from_raw_parts_mut(src_buf.ptr_mut(src_offset), src_buf.bytes())
+                            std::slice::from_raw_parts_mut(src_buf.ptr_mut(src_offset), src_buf.bytes() - src_offset as usize)
                         },
                         unsafe {
                             std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes())
