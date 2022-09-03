@@ -73,19 +73,19 @@ jobs:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
-      - run: make target/gyroflow-ofx-macosx.zip
+      - run: make target/gyroflow-ofx-macosx.dmg
         env:
           SIGNING_FINGERPRINT: ${{ secrets.MACOS_CERTIFICATE_FINGERPRINT }}
       - name: Notarize and staple release build
         run: |
-          npx notarize-cli --file target/gyroflow-ofx-macosx.zip --bundle-id xyz.gyroflow.ofx --asc-provider="${{ secrets.MACOS_TEAM }}" --username="${{ secrets.MACOS_ACCOUNT_USER }}" --password="${{ secrets.MACOS_ACCOUNT_PASS }}"
-          xcrun stapler staple --verbose target/gyroflow-ofx-macosx.zip
+          npx notarize-cli --file target/gyroflow-ofx-macosx.dmg --bundle-id xyz.gyroflow.ofx --asc-provider="${{ secrets.MACOS_TEAM }}" --username="${{ secrets.MACOS_ACCOUNT_USER }}" --password="${{ secrets.MACOS_ACCOUNT_PASS }}"
+          xcrun stapler staple --verbose target/gyroflow-ofx-macosx.dmg
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: target/gyroflow-ofx-macosx.zip
+          files: target/gyroflow-ofx-macosx.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
