@@ -1,6 +1,6 @@
 [package]
 name = "gyroflow-ofx"
-version = "1.0.5"
+version = "1.0.6"
 authors = ["Ilya Epifanov <elijah.epifanov@gmail.com>", "Adrian <adrian.eddy@gmail.com>"]
 license = "GPL-3.0-or-later"
 edition = "2021"
