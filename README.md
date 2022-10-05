@@ -18,14 +18,14 @@ Grab the archive for your OS from the [releases page](https://github.com/gyroflo
 
 ## MacOS
 
-Copy the `GyroFlow.ofx.bundle` from the archive into the `/Library/OFX/Plugins` directory.
+Copy the `Gyroflow.ofx.bundle` from the archive into the `/Library/OFX/Plugins` directory.
 Create the directory if it doesn't exist yet.
 You will probably need to open System Preferences -> Security and Allow plugin from unknown developer. Then restart Resolve.
-Then in Resolve, make sure to go to Preferences -> Video plugins and enable GyroFlow.ofx.bundle.
+Then in Resolve, make sure to go to Preferences -> Video plugins and enable Gyroflow.ofx.bundle.
 
 ## Windows
 
-Copy the `GyroFlow.ofx.bundle` from the archive into the `C:\Program Files\Common Files\OFX\Plugins` folder.
+Copy the `Gyroflow.ofx.bundle` from the archive into the `C:\Program Files\Common Files\OFX\Plugins` folder.
 Create the folder if it doesn't exist yet.
 
 # Usage
