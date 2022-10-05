@@ -997,7 +997,6 @@ dependencies = [
 name = "gyroflow-ofx"
 version = "1.0.5"
 dependencies = [
- "byteorder",
  "gyroflow-core",
  "itertools",
  "log",
@@ -1005,7 +1004,6 @@ dependencies = [
  "measure_time",
  "ofx",
  "serde_json",
- "win_dbg_logger",
 ]
 
 [[package]]
@@ -2778,15 +2776,6 @@ checksum = "b3aba2d1dac31ac7cae82847ac5b8be822aee8f99a4e100f279605016b185c5f"
 dependencies = [
  "bytemuck",
  "safe_arch",
-]
-
-[[package]]
-name = "win_dbg_logger"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d1b4c22244dc27534d81e2f6fc3efd6b20e50c010f177efc20b719ec759a779"
-dependencies = [
- "log",
 ]
 
 [[package]]

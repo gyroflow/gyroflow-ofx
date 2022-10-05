@@ -20,8 +20,7 @@ lru = "0.8"
 gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "fff24b1" }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false }
 serde_json = "1"
-byteorder = "1.4"
-win_dbg_logger = "*"
+
 
 [features]
 default = ["use-opencl"]
