@@ -979,7 +979,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.3.0-rc"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=9508aa6#9508aa6876afc855f470106c07db04fdbed7870a"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=6c20a7f#6c20a7f0878de722ae859e4c5fe0756fe2632ff9"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1033,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "gyroflow-ofx"
-version = "1.0.7"
+version = "1.0.8"
 dependencies = [
  "gyroflow-core",
  "itertools",
