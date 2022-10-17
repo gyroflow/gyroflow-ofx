@@ -1,6 +1,6 @@
 [package]
 name = "gyroflow-ofx"
-version = "1.0.8"
+version = "1.0.9"
 authors = ["Ilya Epifanov <elijah.epifanov@gmail.com>", "Adrian <adrian.eddy@gmail.com>"]
 license = "GPL-3.0-or-later"
 edition = "2021"
@@ -17,7 +17,7 @@ measure_time = "0.8"
 log = "0.4"
 itertools = "0.10"
 lru = "0.8"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "3f38b61" }
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "866eed5" }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false }
 serde_json = "1"
 

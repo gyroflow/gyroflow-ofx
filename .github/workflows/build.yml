@@ -6,7 +6,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
       - run: sudo apt-get update -y
@@ -14,7 +14,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - uses: lukka/get-cmake@latest
       - uses: lukka/run-vcpkg@v10
@@ -30,7 +30,7 @@ jobs:
       - run: make target/gyroflow-ofx-linux.zip
 
       - name: Save Binaries
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: gyroflow-ofx-linux
           path: target/gyroflow-ofx-linux.zip
@@ -51,7 +51,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - name: Add rust target
         run: rustup target add aarch64-apple-darwin
@@ -89,7 +89,7 @@ jobs:
           xcrun stapler staple --verbose target/gyroflow-ofx-macosx.dmg
 
       - name: Save Binaries
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: gyroflow-ofx-macosx
           path: target/gyroflow-ofx-macosx.dmg
@@ -113,7 +113,7 @@ jobs:
         with:
           profile: minimal
           target: x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - uses: lukka/get-cmake@latest
       - uses: lukka/run-vcpkg@v10
@@ -134,7 +134,7 @@ jobs:
       - run: make target/gyroflow-ofx-windows.zip
 
       - name: Save Binaries
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: gyroflow-ofx-windows
           path: target/gyroflow-ofx-windows.zip
