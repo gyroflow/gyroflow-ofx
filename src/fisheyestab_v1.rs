@@ -178,6 +178,9 @@ impl Execute for FisheyeStabilizerPlugin {
                 }
 
                 speed_stretch *= src_fps / fps;
+                log::debug!("Source file fps: {src_fps}");
+                log::debug!("Params fps: {fps}");
+                log::debug!("Speed stretch: {speed_stretch}");
 
                 let mut timestamp_us = ((time / src_fps * 1_000_000.0) * speed_stretch).round() as i64;
 
@@ -290,7 +293,7 @@ impl Execute for FisheyeStabilizerPlugin {
 
                         instance_data.param_fov.set_value(params.fov)?;
                         instance_data.param_smoothness.set_value(smoothness)?;
-                        instance_data.param_lens_correction_strength.set_value(params.lens_correction_amount * 100.0)?;
+                        instance_data.param_lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
                     }
                 }
 
