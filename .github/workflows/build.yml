@@ -127,7 +127,7 @@ jobs:
       - run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
       - uses: actions-rs/cargo@v1
         env:
-          RUSTFLAGS: -L ${{ github.workspace }}/vcpkg/packages/opencl_x64-windows-release/lib/
+          RUSTFLAGS: -L C:/vcpkg/packages/opencl_x64-windows-release/lib/
         with:
           command: build
           args: --release

@@ -979,7 +979,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.3.0"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=d835d5a#d835d5a735a672bb29d769869ebc684bce697ced"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=4bee253#4bee253bd6b93cdd86ac2dd8036bfe733fcd80fa"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1031,6 +1031,7 @@ dependencies = [
  "walkdir",
  "wgpu",
  "wgpu-hal",
+ "wgpu-types",
 ]
 
 [[package]]
