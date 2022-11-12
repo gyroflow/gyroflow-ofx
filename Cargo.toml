@@ -17,7 +17,7 @@ measure_time = "0.8"
 log = "0.4"
 itertools = "0.10"
 lru = "0.8"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "4bee253" }
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "fc1e326" }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false }
 serde_json = "1"
 

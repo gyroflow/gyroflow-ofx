@@ -148,8 +148,8 @@ impl Execute for FisheyeStabilizerPlugin {
                 let params_fov = params.fov;
                 let params_lens_correction_strength = params.lens_correction_amount;
                 let params_smoothness = stab.smoothing.read().current().get_parameter("smoothness");
-                let src_fps = instance_data.source_clip.get_frame_rate().unwrap_or(0.0);
                 let fps = params.fps;
+                let src_fps = instance_data.source_clip.get_frame_rate().unwrap_or(fps);
                 let org_ratio = params.video_size.0 as f64 / params.video_size.1 as f64;
                 let src_rect = InstanceData::get_center_rect(width, height, org_ratio);
 
@@ -207,7 +207,7 @@ impl Execute for FisheyeStabilizerPlugin {
                 }
 
                 let processed =
-                    if in_args.get_opencl_enabled()? {
+                    if in_args.get_opencl_enabled().unwrap_or_default() {
                         use std::ffi::c_void;
                         let src_stride = source_rect.x2 as usize * 4 * std::mem::size_of::<f32>();
                         let out_stride = output_rect.x2 as usize * 4 * std::mem::size_of::<f32>();
@@ -223,7 +223,7 @@ impl Execute for FisheyeStabilizerPlugin {
                                 queue: in_args.get_opencl_command_queue()? as *mut c_void,
                             }
                         }).is_some()
-                } else if in_args.get_cuda_enabled()? {
+                } else if in_args.get_cuda_enabled().unwrap_or_default() {
                     false
                 } else {
                     let src = source_image.get_descriptor::<RGBAColourF>()?;
