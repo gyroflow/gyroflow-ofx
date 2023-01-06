@@ -2,10 +2,14 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use gyroflow_core::{StabilizationManager, stabilization::RGBAf};
-use gyroflow_core::gpu::{ BufferDescription, BufferSource };
+use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use measure_time::*;
 use ofx::*;
+
+// TODO: Button: Open Gyroflow
+// TODO: Button: Reload project
+// TODO: Horizon lock
 
 plugin_module!(
     "nl.smslv.gyroflowofx.fisheyestab_v1",
@@ -31,6 +35,7 @@ struct InstanceData {
     param_fov: ParamHandle<Double>,
     param_smoothness: ParamHandle<Double>,
     param_lens_correction_strength: ParamHandle<Double>,
+    param_desqueezed: ParamHandle<Bool>,
     param_status: ParamHandle<Bool>,
     gyrodata: LruCache<String, Arc<StabilizationManager<RGBAf>>>,
 }
@@ -39,10 +44,11 @@ impl InstanceData {
     fn gyrodata(
         &mut self,
         width: usize,
-        height: usize
+        height: usize,
+        desqueezed: bool
     ) -> Result<Arc<StabilizationManager<RGBAf>>> {
         let gyrodata_filename = self.param_gyrodata.get_value()?;
-        let key = format!("{gyrodata_filename}{width}{height}");
+        let key = format!("{gyrodata_filename}{width}{height}{desqueezed}");
         let gyrodata = if let Some(gyrodata) = self.gyrodata.get(&key) {
             gyrodata.clone()
         } else {
@@ -52,6 +58,24 @@ impl InstanceData {
                 Error::UnknownError
             })?;
 
+            if desqueezed {
+                let (x_stretch, y_stretch) = {
+                    let lens = gyrodata.lens.read();
+                    (lens.input_horizontal_stretch, lens.input_vertical_stretch)
+                };
+                if (x_stretch > 0.01 && x_stretch != 1.0) || (y_stretch > 0.01 && y_stretch != 1.0) {
+                    {
+                        let mut params = gyrodata.params.write();
+                        params.video_size.0 = (params.video_size.0 as f64 * x_stretch).round() as usize;
+                        params.video_size.1 = (params.video_size.1 as f64 * y_stretch).round() as usize;
+                    }
+                    {
+                        let mut lens = gyrodata.lens.write();
+                        lens.input_horizontal_stretch = 1.0;
+                        lens.input_vertical_stretch = 1.0;
+                    }
+                }
+            }
             let video_size = {
                 let mut params = gyrodata.params.write();
                 params.framebuffer_inverted = true;
@@ -121,28 +145,25 @@ impl Execute for FisheyeStabilizerPlugin {
 
         match *action {
             Render(ref mut effect, ref in_args) => {
+                // let _time = std::time::Instant::now();
+
                 let time = in_args.get_time()?;
                 let instance_data: &mut InstanceData = effect.get_instance_data()?;
                 let source_rect: RectD = instance_data.source_clip.get_region_of_definition(time)?;
                 let output_rect: RectD = instance_data.output_clip.get_region_of_definition(time)?;
 
-                let mut source_image = instance_data.source_clip.get_image(time)?;
                 let output_image = instance_data.output_clip.get_image_mut(time)?;
                 let output_image = output_image.borrow_mut();
 
                 let fov = instance_data.param_fov.get_value_at_time(time)?;
                 let lens_correction_strength = instance_data.param_lens_correction_strength.get_value_at_time(time)? / 100.0;
                 let smoothness = instance_data.param_smoothness.get_value_at_time(time)?;
+                let desqueezed = instance_data.param_desqueezed.get_value_at_time(time)?;
 
-                let mut width = source_rect.x2 as usize;
-                let mut height = source_rect.y2 as usize;
-                if let Ok(srcb) = source_image.get_descriptor::<RGBAColourF>() {
-                    let dims = srcb.data().dimensions();
-                    width = dims.0 as usize;
-                    height = dims.1 as usize;
-                }
+                let width = (source_rect.x2 - source_rect.x1) as usize;
+                let height = (source_rect.y2 - source_rect.y1) as usize;
 
-                let stab = instance_data.gyrodata(width, height)?;
+                let stab = instance_data.gyrodata(width, height, desqueezed)?;
 
                 let params = stab.params.read();
                 let params_fov = params.fov;
@@ -158,6 +179,7 @@ impl Execute for FisheyeStabilizerPlugin {
                 instance_data.param_fov.set_enabled(loaded)?;
                 instance_data.param_smoothness.set_enabled(loaded)?;
                 instance_data.param_lens_correction_strength.set_enabled(loaded)?;
+                instance_data.param_desqueezed.set_enabled(loaded)?;
 
                 let frame_number = (params.frame_count - 1) as f64;
 
@@ -178,19 +200,19 @@ impl Execute for FisheyeStabilizerPlugin {
                 }
 
                 speed_stretch *= src_fps / fps;
-                log::debug!("Source file fps: {src_fps}");
-                log::debug!("Params fps: {fps}");
-                log::debug!("Speed stretch: {speed_stretch}");
 
+                let mut time = time;
                 let mut timestamp_us = ((time / src_fps * 1_000_000.0) * speed_stretch).round() as i64;
 
                 let source_timestamp_us = params.get_source_timestamp_at_ramped_timestamp(timestamp_us);
-                if source_timestamp_us != timestamp_us {
-                    let new_time = (source_timestamp_us as f64 / speed_stretch / 1_000_000.0 * src_fps).round();
-                    source_image = instance_data.source_clip.get_image(new_time)?;
-                    timestamp_us = ((new_time / src_fps * 1_000_000.0) * speed_stretch).round() as i64;
-                }
                 drop(params);
+
+                if source_timestamp_us != timestamp_us {
+                    time = (source_timestamp_us as f64 / speed_stretch / 1_000_000.0 * src_fps).round();
+                    timestamp_us = ((time / src_fps * 1_000_000.0) * speed_stretch).round() as i64;
+                }
+
+                let source_image = instance_data.source_clip.get_image(time)?;
 
                 if (params_fov - fov).abs() > 0.001 {
                     stab.params.write().fov = fov;
@@ -206,46 +228,109 @@ impl Execute for FisheyeStabilizerPlugin {
                     stab.recompute_blocking();
                 }
 
+                let src_stride = (source_rect.x2 - source_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
+                let out_stride = (output_rect.x2 - output_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
+                let src_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize, src_stride);
+                let out_size = ((output_rect.x2 - output_rect.x1) as usize, (output_rect.y2 - output_rect.y1) as usize, out_stride);
+
                 let processed =
                     if in_args.get_opencl_enabled().unwrap_or_default() {
                         use std::ffi::c_void;
-                        let src_stride = source_rect.x2 as usize * 4 * std::mem::size_of::<f32>();
-                        let out_stride = output_rect.x2 as usize * 4 * std::mem::size_of::<f32>();
+                        let queue = in_args.get_opencl_command_queue()? as *mut c_void;
 
-                        stab.process_pixels(timestamp_us, &mut BufferDescription {
-                            input_size:  (source_rect.x2 as usize, source_rect.y2 as usize, src_stride),
-                            output_size: (output_rect.x2 as usize, output_rect.y2 as usize, out_stride),
-                            input_rect: Some(src_rect),
-                            output_rect: None,
-                            buffers: BufferSource::OpenCL {
-                                input: source_image.get_data()? as *mut c_void,
-                                output: output_image.get_data()? as *mut c_void,
-                                queue: in_args.get_opencl_command_queue()? as *mut c_void,
+                        stab.process_pixels(timestamp_us, &mut Buffers {
+                            input: BufferDescription {
+                                size: src_size,
+                                rect: Some(src_rect),
+                                data: BufferSource::OpenCL { texture: source_image.get_data()? as *mut c_void, queue },
+                                texture_copy: false
+                            },
+                            output: BufferDescription {
+                                size: out_size,
+                                rect: None,
+                                data: BufferSource::OpenCL { texture: output_image.get_data()? as *mut c_void, queue },
+                                texture_copy: false
                             }
                         }).is_some()
+                } else if in_args.get_metal_enabled().unwrap_or_default() {
+                    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+                    { false }
+                    #[cfg(any(target_os = "macos", target_os = "ios"))]
+                    {
+                        let in_ptr  = source_image.get_data()? as *mut metal::MTLBuffer;
+                        let out_ptr = output_image.get_data()? as *mut metal::MTLBuffer;
+                        let command_queue = in_args.get_metal_command_queue()? as *mut metal::MTLCommandQueue;
+
+                        let ret = stab.process_pixels(timestamp_us, &mut Buffers {
+                            input: BufferDescription {
+                                size: src_size,
+                                rect: Some(src_rect),
+                                data: BufferSource::MetalBuffer { buffer: in_ptr, command_queue },
+                                texture_copy: false
+                            },
+                            output: BufferDescription {
+                                size: out_size,
+                                rect: None,
+                                data: BufferSource::MetalBuffer { buffer: out_ptr, command_queue },
+                                texture_copy: false
+                            }
+                        });
+                        log::info!("{:?}", &ret);
+
+                        ret.is_some()
+                    }
                 } else if in_args.get_cuda_enabled().unwrap_or_default() {
-                    false
+                    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+                    { false }
+                    #[cfg(any(target_os = "windows", target_os = "linux"))]
+                    {
+                        let in_ptr  = source_image.get_data()? as *mut std::ffi::c_void;
+                        let out_ptr = output_image.get_data()? as *mut std::ffi::c_void;
+
+                        let ret = stab.process_pixels(timestamp_us, &mut Buffers {
+                            input: BufferDescription {
+                                size: src_size,
+                                rect: Some(src_rect),
+                                data: BufferSource::CUDABuffer { buffer: in_ptr },
+                                texture_copy: true
+                            },
+                            output: BufferDescription {
+                                size: out_size,
+                                rect: None,
+                                data: BufferSource::CUDABuffer { buffer: out_ptr },
+                                texture_copy: true
+                            }
+                        });
+                        log::info!("{:?}", &ret);
+
+                        ret.is_some()
+                    }
                 } else {
                     let src = source_image.get_descriptor::<RGBAColourF>()?;
                     let dst = output_image.get_descriptor::<RGBAColourF>()?;
 
                     let mut src_buf = src.data();
                     let mut dst_buf = dst.data();
-                    let src_stride = src_buf.stride_bytes().abs() as usize;
-                    let out_stride = dst_buf.stride_bytes().abs() as usize;
 
-                    let out = stab.process_pixels(timestamp_us, &mut BufferDescription {
-                        input_size:  (src_buf.dimensions().0 as usize, src_buf.dimensions().1 as usize, src_stride),
-                        output_size: (dst_buf.dimensions().0 as usize, dst_buf.dimensions().1 as usize, out_stride),
-                        input_rect: Some(src_rect),
-                        output_rect: None,
-                        buffers: BufferSource::Cpu {
-                            input:  unsafe { std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes()) },
-                            output: unsafe { std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes()) }
+                    let out = stab.process_pixels(timestamp_us, &mut Buffers {
+                        input: BufferDescription {
+                            size: src_size,
+                            rect: Some(src_rect),
+                            data: BufferSource::Cpu { buffer: unsafe { std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes()) } },
+                            texture_copy: false
+                        },
+                        output: BufferDescription {
+                            size: out_size,
+                            rect: None,
+                            data: BufferSource::Cpu { buffer: unsafe { std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes()) } },
+                            texture_copy: false
                         }
                     });
+                    log::info!("CPU: {:?}", &out);
                     out.is_some()
                 };
+
+                // log::info!("Render took {:.2}ms", _time.elapsed().as_micros() as f64 / 1000.0);
 
                 if effect.abort()? || !processed {
                     FAILED
@@ -266,6 +351,7 @@ impl Execute for FisheyeStabilizerPlugin {
                 let param_fov = param_set.parameter("FOV")?;
                 let param_smoothness = param_set.parameter("Smoothness")?;
                 let param_lens_correction_strength = param_set.parameter("LensCorrectionStrength")?;
+                let param_desqueezed = param_set.parameter("Desqueezed")?;
                 let param_status = param_set.parameter("Status")?;
 
                 effect.set_instance_data(InstanceData {
@@ -275,8 +361,9 @@ impl Execute for FisheyeStabilizerPlugin {
                     param_smoothness,
                     param_lens_correction_strength,
                     param_fov,
+                    param_desqueezed,
                     param_status,
-                    gyrodata: LruCache::new(std::num::NonZeroUsize::new(1).unwrap()),
+                    gyrodata: LruCache::new(std::num::NonZeroUsize::new(5).unwrap())
                 })?;
 
                 OK
@@ -284,7 +371,7 @@ impl Execute for FisheyeStabilizerPlugin {
             InstanceChanged(ref mut effect, ref mut in_args) => {
                 if in_args.get_name()? == "gyrodata" && in_args.get_change_reason()? == Change::UserEdited {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
-                    let stab = instance_data.gyrodata(16, 16)?;
+                    let stab = instance_data.gyrodata(16, 16, false)?;
                     let params = stab.params.read();
                     let loaded = params.duration_ms > 0.0;
 
@@ -295,6 +382,7 @@ impl Execute for FisheyeStabilizerPlugin {
                         instance_data.param_smoothness.set_value(smoothness)?;
                         instance_data.param_lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
                     }
+                    instance_data.gyrodata.clear();
                 }
 
                 OK
@@ -347,6 +435,11 @@ impl Execute for FisheyeStabilizerPlugin {
                 param_lens_correction.set_script_name("LensCorrectionStrength")?;
                 param_lens_correction.set_enabled(false)?;
 
+                let mut param_desqueezed = param_set.param_define_boolean("Desqueezed")?;
+                param_desqueezed.set_label("Disable Gyroflow's stretch")?;
+                param_desqueezed.set_hint("If you used Input stretch in the lens profile in Gyroflow, and you de-stretched the video separately in Resolve, check this to disable Gyroflow's internal stretching.")?;
+                param_desqueezed.set_enabled(false)?;
+
                 let mut param_status = param_set.param_define_boolean("Status")?;
                 param_status.set_label("Status")?;
                 param_status.set_hint("Status")?;
@@ -360,15 +453,15 @@ impl Execute for FisheyeStabilizerPlugin {
 
                 param_set
                     .param_define_page(PARAM_MAIN_NAME)?
-                    .set_children(&[PARAM_GYRODATA, "FOV", "Smoothness", "LensCorrectionStrength", "Status"])?;
+                    .set_children(&[PARAM_GYRODATA, "FOV", "Smoothness", "LensCorrectionStrength", "Status", "Desqueezed"])?;
 
                 OK
             }
 
             Describe(ref mut effect) => {
-                // d!("host supports opencl: {:?}", _plugin_context.get_host().get_opencl_render_supported());
-                // d!("host supports cuda: {:?}", _plugin_context.get_host().get_cuda_render_supported());
-                // d!("host supports metal: {:?}", _plugin_context.get_host().get_metal_render_supported());
+                // log::info!("host supports opencl: {:?}", _plugin_context.get_host().get_opencl_render_supported());
+                // log::info!("host supports cuda: {:?}", _plugin_context.get_host().get_cuda_render_supported());
+                // log::info!("host supports metal: {:?}", _plugin_context.get_host().get_metal_render_supported());
 
                 let mut effect_properties: EffectDescriptor = effect.properties()?;
                 effect_properties.set_grouping("Warp")?;
@@ -387,9 +480,21 @@ impl Execute for FisheyeStabilizerPlugin {
                 effect_properties.set_render_thread_safety(ImageEffectRender::FullySafe)?;
                 effect_properties.set_supports_multi_resolution(true)?;
                 effect_properties.set_temporal_clip_access(true)?;
-                effect_properties.set_opencl_render_supported("true")?;
-                // effect_properties.set_cuda_render_supported("true")?;
-                // effect_properties.set_metal_render_supported("true")?;
+
+                let opencl_devices = gyroflow_core::gpu::opencl::OclWrapper::list_devices();
+                let wgpu_devices = gyroflow_core::gpu::wgpu::WgpuWrapper::list_devices();
+                if !opencl_devices.is_empty() {
+                    effect_properties.set_opencl_render_supported("true")?;
+                }
+
+                let _has_metal  = wgpu_devices.iter().any(|x| x.contains("(Metal)"));
+                let _has_vulkan = wgpu_devices.iter().any(|x| x.contains("(Vulkan)"));
+                let _has_dx12   = wgpu_devices.iter().any(|x| x.contains("(Dx12)"));
+
+                #[cfg(any(target_os = "macos", target_os = "ios"))]
+                if _has_metal { effect_properties.set_metal_render_supported("true")?; }
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                if _has_vulkan || _has_dx12 { effect_properties.set_cuda_render_supported("true")?; }
 
                 OK
             }

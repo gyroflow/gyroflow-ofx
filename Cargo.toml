@@ -7,20 +7,21 @@ edition = "2021"
 description = "Gyroflow OpenFX plugin"
 
 [lib]
-name="gyroflow_ofx"
+name = "gyroflow_ofx"
 crate-type = ["cdylib"]
-path="src/lib.rs"
+path = "src/lib.rs"
 
 [dependencies]
 ofx = "0.3"
 measure_time = "0.8"
 log = "0.4"
 itertools = "0.10"
-lru = "0.8"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "fc1e326" }
+lru = "0.9"
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "e446c59" }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false }
-serde_json = "1"
 
+[target."cfg(any(target_os = \"macos\", target_os = \"ios\"))".dependencies.metal]
+version = "0.24.0"
 
 [features]
 default = ["use-opencl"]
