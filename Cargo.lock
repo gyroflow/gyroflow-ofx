@@ -1043,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.4.2"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=56fdeac#56fdeac8408b169a7c1730677cf225238b189d47"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=754d457#754d4577908abc7feef0c777adc1cd9638b701b4"
 dependencies = [
  "ahrs",
  "akaze",
