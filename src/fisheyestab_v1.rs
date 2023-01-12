@@ -7,10 +7,6 @@ use lru::LruCache;
 use measure_time::*;
 use ofx::*;
 
-// TODO: Button: Open Gyroflow
-// TODO: Button: Reload project
-// TODO: Horizon lock
-
 plugin_module!(
     "nl.smslv.gyroflowofx.fisheyestab_v1",
     ApiVersion(1),
@@ -45,10 +41,11 @@ impl InstanceData {
         &mut self,
         width: usize,
         height: usize,
-        desqueezed: bool
+        desqueezed: bool,
+        additional_key: i32
     ) -> Result<Arc<StabilizationManager<RGBAf>>> {
         let gyrodata_filename = self.param_gyrodata.get_value()?;
-        let key = format!("{gyrodata_filename}{width}{height}{desqueezed}");
+        let key = format!("{gyrodata_filename}{width}{height}{desqueezed}{additional_key}");
         let gyrodata = if let Some(gyrodata) = self.gyrodata.get(&key) {
             gyrodata.clone()
         } else {
@@ -141,6 +138,12 @@ impl Execute for FisheyeStabilizerPlugin {
             Render(ref mut effect, ref in_args) => {
                 let _time = std::time::Instant::now();
 
+                let mut additional_key = -1;
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                if in_args.get_cuda_enabled().unwrap_or_default() {
+                    additional_key = gyroflow_core::gpu::wgpu_interop_cuda::get_current_cuda_device();
+                }
+
                 let time = in_args.get_time()?;
                 let instance_data: &mut InstanceData = effect.get_instance_data()?;
 
@@ -152,11 +155,11 @@ impl Execute for FisheyeStabilizerPlugin {
                 let smoothness = instance_data.param_smoothness.get_value_at_time(time)?;
                 let desqueezed = instance_data.param_desqueezed.get_value_at_time(time)?;
 
-                let out_bounds: RectI = output_image.get_region_of_definition()?;
-                let out_width= (out_bounds.x2 - out_bounds.x1) as usize;
-                let out_height= (out_bounds.y2 - out_bounds.y1) as usize;
+                let output_rect: RectI = output_image.get_region_of_definition()?;
+                let out_width= (output_rect.x2 - output_rect.x1) as usize;
+                let out_height= (output_rect.y2 - output_rect.y1) as usize;
 
-                let stab = instance_data.gyrodata(out_width, out_height, desqueezed)?;
+                let stab = instance_data.gyrodata(out_width, out_height, desqueezed, additional_key)?;
 
                 let params = stab.params.read();
                 let params_fov = params.fov;
@@ -207,9 +210,11 @@ impl Execute for FisheyeStabilizerPlugin {
                 let source_image = instance_data.source_clip.get_image(time)?;
 
                 let source_rect: RectI = source_image.get_region_of_definition()?;
-                let output_rect: RectI = output_image.get_region_of_definition()?;
-                let width = (source_rect.x2 - source_rect.x1) as usize;
-                let height = (source_rect.y2 - source_rect.y1) as usize;
+
+                let src_stride = (source_rect.x2 - source_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
+                let out_stride = (output_rect.x2 - output_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
+                let src_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize, src_stride);
+                let out_size = ((output_rect.x2 - output_rect.x1) as usize, (output_rect.y2 - output_rect.y1) as usize, out_stride);
 
                 let src_rect = InstanceData::get_center_rect(out_width, out_height, org_ratio);
 
@@ -226,12 +231,6 @@ impl Execute for FisheyeStabilizerPlugin {
                     stab.smoothing.write().current_mut().set_parameter("smoothness", smoothness);
                     stab.recompute_blocking();
                 }
-
-                let src_stride = (source_rect.x2 - source_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
-                let out_stride = (output_rect.x2 - output_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
-                let src_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize, src_stride);
-                let out_size = ((output_rect.x2 - output_rect.x1) as usize, (output_rect.y2 - output_rect.y1) as usize, out_stride);
-
                 let processed =
                     if in_args.get_opencl_enabled().unwrap_or_default() {
                         use std::ffi::c_void;
@@ -323,7 +322,7 @@ impl Execute for FisheyeStabilizerPlugin {
                     })
                 };
 
-                // log::info!("Rendered {width}x{height} in {:.2}ms: {:?}", _time.elapsed().as_micros() as f64 / 1000.0, processed);
+                // log::info!("Rendered | {additional_key} | {}x{} in {:.2}ms: {:?}", src_size.0, src_size.1, _time.elapsed().as_micros() as f64 / 1000.0, processed);
 
                 if effect.abort()? || !processed.is_some() {
                     FAILED
@@ -356,7 +355,7 @@ impl Execute for FisheyeStabilizerPlugin {
                     param_fov,
                     param_desqueezed,
                     param_status,
-                    gyrodata: LruCache::new(std::num::NonZeroUsize::new(5).unwrap())
+                    gyrodata: LruCache::new(std::num::NonZeroUsize::new(8).unwrap())
                 })?;
 
                 OK
@@ -364,7 +363,7 @@ impl Execute for FisheyeStabilizerPlugin {
             InstanceChanged(ref mut effect, ref mut in_args) => {
                 if in_args.get_name()? == "gyrodata" && in_args.get_change_reason()? == Change::UserEdited {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
-                    let stab = instance_data.gyrodata(16, 16, false)?;
+                    let stab = instance_data.gyrodata(16, 16, false, 0)?;
                     let params = stab.params.read();
                     let loaded = params.duration_ms > 0.0;
 
@@ -381,7 +380,14 @@ impl Execute for FisheyeStabilizerPlugin {
                 OK
             }
 
-            DestroyInstance(ref mut _effect) => OK,
+            DestroyInstance(ref mut effect) => {
+                effect.get_instance_data::<InstanceData>()?.gyrodata.clear();
+                OK
+            },
+            PurgeCaches(ref mut effect) => {
+                effect.get_instance_data::<InstanceData>()?.gyrodata.clear();
+                OK
+            },
 
             DescribeInContext(ref mut effect, ref _in_args) => {
                 let mut output_clip = effect.new_output_clip()?;
@@ -492,7 +498,10 @@ impl Execute for FisheyeStabilizerPlugin {
                 OK
             }
 
-            Load => OK,
+            Load => {
+                log_panics::init();
+                OK
+            },
 
             _ => REPLY_DEFAULT,
         }

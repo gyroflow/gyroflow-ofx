@@ -116,9 +116,9 @@ dependencies = [
 
 [[package]]
 name = "argh"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c375edecfd2074d5edcc31396860b6e54b6f928714d0e097b983053fac0cabe3"
+checksum = "ab257697eb9496bf75526f0217b5ed64636a9cfafa78b8365c71bd283fcef93e"
 dependencies = [
  "argh_derive",
  "argh_shared",
@@ -126,12 +126,11 @@ dependencies = [
 
 [[package]]
 name = "argh_derive"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa013479b80109a1bf01a039412b0f0013d716f36921226d86c6709032fb7a03"
+checksum = "b382dbd3288e053331f03399e1db106c9fb0d8562ad62cb04859ae926f324fa6"
 dependencies = [
  "argh_shared",
- "heck",
  "proc-macro2",
  "quote",
  "syn",
@@ -139,9 +138,9 @@ dependencies = [
 
 [[package]]
 name = "argh_shared"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "149f75bbec1827618262e0855a68f0f9a7f2edc13faebf33c4f16d6725edb6a9"
+checksum = "64cb94155d965e3d37ffbbe7cc5b82c3dd79dd33bd48e536f73d2cfb8d85506f"
 
 [[package]]
 name = "argmin"
@@ -1025,7 +1024,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.4.2"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=625f05e#625f05e8bf91444c1aded13b21e47f0188755d7d"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=695f890#695f890d6b3304c2121ece61a033ecfb21a685be"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1096,6 +1095,7 @@ dependencies = [
  "gyroflow-core",
  "itertools",
  "log",
+ "log-panics",
  "lru",
  "measure_time",
  "metal",
@@ -1128,18 +1128,12 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ff8ae62cd3a9102e5637afc8452c55acf3844001bd5374e0b0bd7b6616c038"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
  "ahash 0.8.2",
 ]
-
-[[package]]
-name = "heck"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
 
 [[package]]
 name = "hermit-abi"
@@ -1425,12 +1419,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "log-panics"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f9dd8546191c1850ecf67d22f5ff00a935b890d0e84713159a55495cc2ac5f"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "lru"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71e7d46de488603ffdd5f30afbc64fbba2378214a2c3a2fb83abf3d33126df17"
 dependencies = [
- "hashbrown 0.13.1",
+ "hashbrown 0.13.2",
 ]
 
 [[package]]
@@ -2471,7 +2474,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "telemetry-parser"
 version = "0.2.7"
-source = "git+https://github.com/AdrianEddy/telemetry-parser.git?rev=267d4bc#267d4bc38a6e05a9b893c6bf4104999016b2f3e9"
+source = "git+https://github.com/AdrianEddy/telemetry-parser.git?rev=1b9b2ce#1b9b2ceecfeb9f70495e366601e3b017469ebb0f"
 dependencies = [
  "argh",
  "byteorder",
