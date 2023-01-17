@@ -10,7 +10,7 @@ jobs:
         with:
           submodules: recursive
       - run: sudo apt-get update -y
-      - run: sudo apt-get install -y ocl-icd-opencl-dev
+      - run: sudo apt-get install -y ocl-icd-opencl-dev libgtk-3-dev
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
