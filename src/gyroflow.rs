@@ -469,9 +469,15 @@ impl Execute for GyroflowPlugin {
             }
             InstanceChanged(ref mut effect, ref mut in_args) => {
                 if in_args.get_name()? == "Browse" {
-                    let d = rfd::FileDialog::new().add_filter("Gyroflow project files", &["gyroflow"]);
+                    let instance_data: &mut InstanceData = effect.get_instance_data()?;
+                    let mut d = rfd::FileDialog::new().add_filter("Gyroflow project files", &["gyroflow"]);
+                    let current_path = instance_data.param_project_path.get_value()?;
+                    if !current_path.is_empty() {
+                        if let Some(path) = std::path::Path::new(&current_path).parent() {
+                            d = d.set_directory(path);
+                        }
+                    }
                     if let Some(d) = d.pick_file() {
-                        let instance_data: &mut InstanceData = effect.get_instance_data()?;
                         instance_data.param_project_path.set_value(d.display().to_string())?;
                     }
                 }

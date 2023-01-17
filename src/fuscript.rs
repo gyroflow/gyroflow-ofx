@@ -54,7 +54,24 @@ impl CurrentFileInfo {
                     let resolution = lines[4].split("x").filter_map(|x| x.parse::<usize>().ok()).collect::<Vec<_>>();
                     let file_path = lines[5];
                     if fps > 0.0 && frame_count > 0 && duration_s > 0.0 && !file_path.is_empty() {
-                        let project_path = std::path::Path::new(file_path).with_extension("gyroflow");
+                        let mut project_path = std::path::Path::new(file_path).with_extension("gyroflow");
+                        if !project_path.exists() {
+                            // Find first project path that begins with the file name
+                            if let Some(parent) = project_path.parent() {
+                                if let Ok(paths) = std::fs::read_dir(parent) {
+                                    if let Some(fname) = project_path.with_extension("").file_name().map(|x| x.to_string_lossy().to_string()) {
+                                        for path in paths {
+                                            if let Ok(path) = path {
+                                                let path_fname = path.file_name().to_string_lossy().to_string();
+                                                if path_fname.starts_with(&fname) && path_fname.ends_with(".gyroflow") {
+                                                    project_path = path.path();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         let info = Self {
                             file_path: file_path.to_string(),
                             fps,
