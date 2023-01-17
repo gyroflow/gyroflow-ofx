@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
-use gyroflow_core::{ StabilizationManager, stabilization::RGBAf };
+use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf } };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use measure_time::*;
@@ -37,12 +37,10 @@ struct InstanceData {
     param_toggle_overview: ParamHandle<Bool>,
     param_reload_project: ParamHandle<Bool>,
     param_dont_draw_outside: ParamHandle<Bool>,
-    gyrodata: LruCache<String, Arc<StabilizationManager<RGBAf>>>,
+    gyrodata: LruCache<String, Arc<StabilizationManager>>,
 
     original_video_size: (usize, usize),
     original_output_size: (usize, usize),
-
-    last_output_rect: RectI,
 
     current_file_info_pending: Arc<AtomicBool>,
     current_file_info: Arc<Mutex<Option<CurrentFileInfo>>>
@@ -61,10 +59,9 @@ impl InstanceData {
         let _ = self.param_open_in_gyroflow.set_label(if loaded { "Open in Gyroflow" } else { "Open Gyroflow" });
     }
 
-    fn gyrodata(&mut self, device: i32) -> Result<Arc<StabilizationManager<RGBAf>>> {
+    fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI, device: i32) -> Result<Arc<StabilizationManager>> {
         let disable_stretch = self.param_disable_stretch.get_value()?;
         let disable_rotation = self.param_disable_rotation.get_value()?;
-        let output_rect = self.last_output_rect;
 
         let source_rect = self.source_clip.get_region_of_definition(0.0)?;
         let in_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize);
@@ -75,7 +72,7 @@ impl InstanceData {
             self.update_loaded_state(false);
             return Err(Error::UnknownError);
         }
-        let key = format!("{path}{in_size:?}{out_size:?}{disable_stretch}{disable_rotation}{device}");
+        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}{disable_rotation}{device}");
         let stab = if let Some(stab) = self.gyrodata.get(&key) {
             stab.clone()
         } else {
@@ -85,6 +82,7 @@ impl InstanceData {
                 // Try to load from video file
                 if let Err(e) = stab.load_video_file(&path, None) {
                     log::error!("An error occured: {e:?}");
+                    self.update_loaded_state(false);
                     return Err(Error::UnknownError);
                 }
             } else {
@@ -99,9 +97,7 @@ impl InstanceData {
                 let mut is_preset = false;
                 stab.import_gyroflow_data(project_data.as_bytes(), true, Some(std::path::PathBuf::from(path)), |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
                     error!("load_gyro_data error: {}", &e);
-
                     self.update_loaded_state(false);
-
                     Error::UnknownError
                 })?;
             }
@@ -110,8 +106,17 @@ impl InstanceData {
                 let params = stab.params.read();
                 self.original_video_size = params.video_size;
                 self.original_output_size = params.video_output_size;
-                params.duration_ms > 0.0
+                let loaded = params.duration_ms > 0.0;
+                if loaded {
+                    let smoothness = stab.smoothing.read().current().get_parameter("smoothness");
+
+                    self.param_fov.set_value(params.fov)?;
+                    self.param_smoothness.set_value(smoothness)?;
+                    self.param_lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
+                }
+                loaded
             };
+
             self.update_loaded_state(loaded);
 
             if disable_stretch {
@@ -240,9 +245,8 @@ impl Execute for GyroflowPlugin {
                 let smoothness = instance_data.param_smoothness.get_value_at_time(time)?;
 
                 let output_rect: RectI = output_image.get_region_of_definition()?;
-                instance_data.last_output_rect = output_rect;
 
-                let stab = instance_data.gyrodata(device)?;
+                let stab = instance_data.gyrodata(output_image.get_pixel_depth()?, output_rect, device)?;
 
                 let params = stab.params.read();
                 let params_fov = params.fov;
@@ -303,14 +307,14 @@ impl Execute for GyroflowPlugin {
 
                 let source_rect: RectI = source_image.get_region_of_definition()?;
 
-                let src_stride = (source_rect.x2 - source_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
-                let out_stride = (output_rect.x2 - output_rect.x1) as usize * 4 * std::mem::size_of::<f32>();
+                let src_stride = source_image.get_row_bytes()? as usize;
+                let out_stride = output_image.get_row_bytes()? as usize;
                 let src_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize, src_stride);
                 let out_size = ((output_rect.x2 - output_rect.x1) as usize, (output_rect.y2 - output_rect.y1) as usize, out_stride);
 
                 let src_rect = InstanceData::get_center_rect(src_size.0, src_size.1, org_ratio);
 
-                let out_rect = if instance_data.param_dont_draw_outside.get_value_at_time(time)? {
+                let mut out_rect = if instance_data.param_dont_draw_outside.get_value_at_time(time)? {
                     let output_ratio = out_size.0 as f64 / out_size.1 as f64;
                     let mut rect = InstanceData::get_center_rect(src_rect.2, src_rect.3, output_ratio);
                     rect.0 += src_rect.0;
@@ -319,6 +323,19 @@ impl Execute for GyroflowPlugin {
                 } else {
                     None
                 };
+                let out_scale = output_image.get_render_scale()?;
+                if out_scale.x != 1.0 || out_scale.y != 1.0 {
+                    // log::debug!("out_scale: {:?}", out_scale);
+                    let w = (out_size.0 as f64 * out_scale.x as f64).round() as usize;
+                    let h = (out_size.1 as f64 * out_scale.y as f64).round() as usize;
+                    out_rect = Some((
+                        0,
+                        out_size.1 - h, // because the coordinates are inverted
+                        w,
+                        h
+                    ));
+                }
+
                 // log::debug!("src_size: {src_size:?} | src_rect: {src_rect:?}");
                 // log::debug!("out_size: {out_size:?} | out_rect: {out_rect:?}");
 
@@ -335,12 +352,12 @@ impl Execute for GyroflowPlugin {
                     stab.smoothing.write().current_mut().set_parameter("smoothness", smoothness);
                     stab.recompute_blocking();
                 }
-                let processed =
+
+                let mut buffers =
                     if in_args.get_opencl_enabled().unwrap_or_default() {
                         use std::ffi::c_void;
                         let queue = in_args.get_opencl_command_queue()? as *mut c_void;
-
-                        stab.process_pixels(timestamp_us, &mut Buffers {
+                        Some(Buffers {
                             input: BufferDescription {
                                 size: src_size,
                                 rect: Some(src_rect),
@@ -354,76 +371,90 @@ impl Execute for GyroflowPlugin {
                                 texture_copy: false
                             }
                         })
-                } else if in_args.get_metal_enabled().unwrap_or_default() {
-                    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-                    { None }
-                    #[cfg(any(target_os = "macos", target_os = "ios"))]
-                    {
-                        let in_ptr  = source_image.get_data()? as *mut metal::MTLBuffer;
-                        let out_ptr = output_image.get_data()? as *mut metal::MTLBuffer;
-                        let command_queue = in_args.get_metal_command_queue()? as *mut metal::MTLCommandQueue;
+                    } else if in_args.get_metal_enabled().unwrap_or_default() {
+                        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+                        { None }
+                        #[cfg(any(target_os = "macos", target_os = "ios"))]
+                        {
+                            let in_ptr  = source_image.get_data()? as *mut metal::MTLBuffer;
+                            let out_ptr = output_image.get_data()? as *mut metal::MTLBuffer;
+                            let command_queue = in_args.get_metal_command_queue()? as *mut metal::MTLCommandQueue;
 
-                        stab.process_pixels(timestamp_us, &mut Buffers {
+                            Some(Buffers {
+                                input: BufferDescription {
+                                    size: src_size,
+                                    rect: Some(src_rect),
+                                    data: BufferSource::MetalBuffer { buffer: in_ptr, command_queue },
+                                    texture_copy: false
+                                },
+                                output: BufferDescription {
+                                    size: out_size,
+                                    rect: out_rect,
+                                    data: BufferSource::MetalBuffer { buffer: out_ptr, command_queue },
+                                    texture_copy: false
+                                }
+                            })
+                        }
+                    } else if in_args.get_cuda_enabled().unwrap_or_default() {
+                        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+                        { None }
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
+                        {
+                            let in_ptr  = source_image.get_data()? as *mut std::ffi::c_void;
+                            let out_ptr = output_image.get_data()? as *mut std::ffi::c_void;
+
+                            Some(Buffers {
+                                input: BufferDescription {
+                                    size: src_size,
+                                    rect: Some(src_rect),
+                                    data: BufferSource::CUDABuffer { buffer: in_ptr },
+                                    texture_copy: true
+                                },
+                                output: BufferDescription {
+                                    size: out_size,
+                                    rect: out_rect,
+                                    data: BufferSource::CUDABuffer { buffer: out_ptr },
+                                    texture_copy: true
+                                }
+                            })
+                        }
+                    } else {
+                        use std::slice::from_raw_parts_mut;
+                        let src_buf = unsafe { match source_image.get_pixel_depth()? {
+                            BitDepth::Byte  => { let b = source_image.get_descriptor::<RGBAColourB>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
+                            BitDepth::Short => { let b = source_image.get_descriptor::<RGBAColourS>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
+                            BitDepth::Float => { let b = source_image.get_descriptor::<RGBAColourF>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) }
+                        } };
+                        let dst_buf = unsafe { match output_image.get_pixel_depth()? {
+                            BitDepth::Byte  => { let b = output_image.get_descriptor::<RGBAColourB>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
+                            BitDepth::Short => { let b = output_image.get_descriptor::<RGBAColourS>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
+                            BitDepth::Float => { let b = output_image.get_descriptor::<RGBAColourF>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) }
+                        } };
+
+                        Some(Buffers {
                             input: BufferDescription {
                                 size: src_size,
                                 rect: Some(src_rect),
-                                data: BufferSource::MetalBuffer { buffer: in_ptr, command_queue },
+                                data: BufferSource::Cpu { buffer: src_buf },
                                 texture_copy: false
                             },
                             output: BufferDescription {
                                 size: out_size,
                                 rect: out_rect,
-                                data: BufferSource::MetalBuffer { buffer: out_ptr, command_queue },
+                                data: BufferSource::Cpu { buffer: dst_buf },
                                 texture_copy: false
                             }
                         })
-                    }
-                } else if in_args.get_cuda_enabled().unwrap_or_default() {
-                    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-                    { None }
-                    #[cfg(any(target_os = "windows", target_os = "linux"))]
-                    {
-                        let in_ptr  = source_image.get_data()? as *mut std::ffi::c_void;
-                        let out_ptr = output_image.get_data()? as *mut std::ffi::c_void;
+                    };
 
-                        let ret = stab.process_pixels(timestamp_us, &mut Buffers {
-                            input: BufferDescription {
-                                size: src_size,
-                                rect: Some(src_rect),
-                                data: BufferSource::CUDABuffer { buffer: in_ptr },
-                                texture_copy: true
-                            },
-                            output: BufferDescription {
-                                size: out_size,
-                                rect: out_rect,
-                                data: BufferSource::CUDABuffer { buffer: out_ptr },
-                                texture_copy: true
-                            }
-                        });
-
-                        ret
+                let processed = if let Some(ref mut buffers) = buffers {
+                    match output_image.get_pixel_depth()? {
+                        BitDepth::Byte  => stab.process_pixels::<RGBA8> (timestamp_us, buffers),
+                        BitDepth::Short => stab.process_pixels::<RGBA16>(timestamp_us, buffers),
+                        BitDepth::Float => stab.process_pixels::<RGBAf> (timestamp_us, buffers)
                     }
                 } else {
-                    let src = source_image.get_descriptor::<RGBAColourF>()?;
-                    let dst = output_image.get_descriptor::<RGBAColourF>()?;
-
-                    let mut src_buf = src.data();
-                    let mut dst_buf = dst.data();
-
-                    stab.process_pixels(timestamp_us, &mut Buffers {
-                        input: BufferDescription {
-                            size: src_size,
-                            rect: Some(src_rect),
-                            data: BufferSource::Cpu { buffer: unsafe { std::slice::from_raw_parts_mut(src_buf.ptr_mut(0), src_buf.bytes()) } },
-                            texture_copy: false
-                        },
-                        output: BufferDescription {
-                            size: out_size,
-                            rect: out_rect,
-                            data: BufferSource::Cpu { buffer: unsafe { std::slice::from_raw_parts_mut(dst_buf.ptr_mut(0), dst_buf.bytes()) } },
-                            texture_copy: false
-                        }
-                    })
+                    None
                 };
 
                 // log::info!("Rendered | {}x{} in {:.2}ms: {:?}", src_size.0, src_size.1, _time.elapsed().as_micros() as f64 / 1000.0, processed);
@@ -460,7 +491,6 @@ impl Execute for GyroflowPlugin {
                     gyrodata:                       LruCache::new(std::num::NonZeroUsize::new(8).unwrap()),
                     original_output_size:           (0, 0),
                     original_video_size:            (0, 0),
-                    last_output_rect:               RectI { x1: 0, y1: 0, x2: 16, y2: 16 },
                     current_file_info:              Arc::new(Mutex::new(None)),
                     current_file_info_pending:      Arc::new(AtomicBool::new(false))
                 })?;
@@ -507,7 +537,7 @@ impl Execute for GyroflowPlugin {
                         }
                     }
                 }
-                if in_args.get_name()? == "ReloadProject" || in_args.get_name()? == "DontDrawOutside" {
+                if in_args.get_name()? == "gyrodata" || in_args.get_name()? == "ReloadProject" || in_args.get_name()? == "DontDrawOutside" {
                     effect.get_instance_data::<InstanceData>()?.gyrodata.clear();
                 }
                 if in_args.get_name()? == "LoadCurrent" {
@@ -515,31 +545,6 @@ impl Execute for GyroflowPlugin {
                     CurrentFileInfo::query(instance_data.current_file_info.clone(), instance_data.current_file_info_pending.clone());
                 }
 
-                if in_args.get_name()? == "gyrodata" && in_args.get_change_reason()? == Change::UserEdited {
-                    let instance_data: &mut InstanceData = effect.get_instance_data()?;
-                    let new_path = instance_data.param_project_path.get_value()?;
-                    let mut loaded = false;
-                    if !new_path.is_empty() {
-                        let mut stab = instance_data.gyrodata.peek_lru().map(|x| x.1.clone());
-                        if stab.is_none() {
-                            stab = instance_data.gyrodata(0).ok();
-                        }
-                        if let Some(stab) = stab {
-                            let params = stab.params.read();
-                            loaded = params.duration_ms > 0.0;
-                            if loaded {
-                                let smoothness = stab.smoothing.read().current().get_parameter("smoothness");
-
-                                instance_data.param_fov.set_value(params.fov)?;
-                                instance_data.param_smoothness.set_value(smoothness)?;
-                                instance_data.param_lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
-                            }
-                        }
-                    }
-                    instance_data.update_loaded_state(loaded);
-
-                    instance_data.gyrodata.clear();
-                }
 
                 if in_args.get_name()? == "ToggleOverview" && in_args.get_change_reason()? == Change::UserEdited {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
@@ -591,19 +596,21 @@ impl Execute for GyroflowPlugin {
                              .set_label("Gyroflow project")?;
 
                     let mut param = param_set.param_define_string("ProjectData")?;
-                    param.set_script_name("ProjectData")?;
+                    let _ = param.set_script_name("ProjectData");
                     param.set_secret(true)?;
 
-                    let mut param = param_set.param_define_button("LoadCurrent")?;
-                    param.set_label("Load for current file")?;
-                    param.set_hint("Try to load project file for current video file, or try to stabilize that video file directly")?;
-                    param.set_parent("ProjectGroup")?;
+                    if CurrentFileInfo::is_available() {
+                        let mut param = param_set.param_define_button("LoadCurrent")?;
+                        param.set_label("Load for current file")?;
+                        param.set_hint("Try to load project file for current video file, or try to stabilize that video file directly")?;
+                        param.set_parent("ProjectGroup")?;
+                    }
 
                     let mut param = param_set.param_define_string("gyrodata")?;
                     param.set_string_type(ParamStringType::SingleLine)?;
                     param.set_label("Project file")?;
                     param.set_hint("Project file")?;
-                    param.set_script_name("gyrodata")?;
+                    let _ = param.set_script_name("gyrodata");
                     param.set_parent("ProjectGroup")?;
 
                     let mut param = param_set.param_define_button("Browse")?;
@@ -618,7 +625,6 @@ impl Execute for GyroflowPlugin {
 
                     let mut param = param_set.param_define_button("ReloadProject")?;
                     param.set_label("Reload project")?;
-                    param.set_enabled(false)?;
                     param.set_hint("Reload currently loaded project")?;
                     param.set_parent("ProjectGroup")?;
 
@@ -639,8 +645,7 @@ impl Execute for GyroflowPlugin {
                     param.set_display_max(3.0)?;
                     param.set_label("FOV")?;
                     param.set_hint("FOV")?;
-                    param.set_script_name("FOV")?;
-                    param.set_enabled(false)?;
+                    let _ = param.set_script_name("FOV");
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_double("Smoothness")?;
@@ -650,8 +655,7 @@ impl Execute for GyroflowPlugin {
                     param.set_display_max(3.0)?;
                     param.set_label("Smoothness")?;
                     param.set_hint("Smoothness")?;
-                    param.set_script_name("Smoothness")?;
-                    param.set_enabled(false)?;
+                    let _ = param.set_script_name("Smoothness");
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_double("LensCorrectionStrength")?;
@@ -661,33 +665,30 @@ impl Execute for GyroflowPlugin {
                     param.set_display_max(100.0)?;
                     param.set_label("Lens correction")?;
                     param.set_hint("Lens correction")?;
-                    param.set_script_name("LensCorrectionStrength")?;
-                    param.set_enabled(false)?;
+                    let _ = param.set_script_name("LensCorrectionStrength");
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_boolean("DisableStretch")?;
                     param.set_label("Disable Gyroflow's stretch")?;
                     param.set_hint("If you used Input stretch in the lens profile in Gyroflow, and you de-stretched the video separately in Resolve, check this to disable Gyroflow's internal stretching.")?;
-                    param.set_enabled(false)?;
-                    param.set_script_name("DisableStretch")?;
+                    let _ = param.set_script_name("DisableStretch");
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_boolean("DisableRotation")?;
                     param.set_label("Disable Gyroflow's rotation")?;
                     param.set_hint("If your video has rotation metadata, Gyroflow rotates it internally but so does the plugin, and it's rotated twice. Check this box in this case.")?;
-                    param.set_enabled(false)?;
-                    param.set_script_name("DisableRotation")?;
+                    let _ = param.set_script_name("DisableRotation");
                     param.set_parent("AdjustGroup")?;
                 }
 
                 let mut param = param_set.param_define_boolean("ToggleOverview")?;
                 param.set_label("Stabilization overview")?;
-                param.set_script_name("ToggleOverview")?;
+                let _ = param.set_script_name("ToggleOverview");
                 param.set_hint("Zooms out the view to see the stabilization results. Disable this before rendering.")?;
 
                 let mut param = param_set.param_define_boolean("DontDrawOutside")?;
                 param.set_label("Don't draw outside source clip")?;
-                param.set_script_name("DontDrawOutside")?;
+                let _ = param.set_script_name("DontDrawOutside");
                 param.set_hint("When clip and timeline aspect ratio don't match, draw the final image inside the source clip, instead of drawing outside it.")?;
 
                 let mut param = param_set.param_define_boolean("Status")?;
@@ -695,18 +696,13 @@ impl Execute for GyroflowPlugin {
                 param.set_hint("Status")?;
                 param.set_enabled(false)?;
 
-                let mut children = vec![
-                    "ProjectGroup", "gyrodata", "Browse", "OpenGyroflow", "OpenRecentProject",
-                    "AdjustGroup", "FOV", "Smoothness", "LensCorrectionStrength", "DisableStretch", "DisableRotation",
-                    "ToggleOverview", "Status", "DontDrawOutside"
-                ];
-                if CurrentFileInfo::is_available() {
-                    children.insert(1, "LoadCurrent");
-                }
-
                 param_set
                     .param_define_page("Main")?
-                    .set_children(&children)?;
+                    .set_children(&[
+                        "ProjectGroup",
+                        "AdjustGroup",
+                        "ToggleOverview", "Status", "DontDrawOutside"
+                    ])?;
 
                 OK
             }
@@ -723,8 +719,7 @@ impl Execute for GyroflowPlugin {
                 effect_properties.set_short_label("Gyroflow")?;
                 effect_properties.set_long_label("Gyroflow")?;
 
-                // effect_properties.set_supported_pixel_depths(&[BitDepth::Byte, BitDepth::Short, BitDepth::Float])?;
-                effect_properties.set_supported_pixel_depths(&[BitDepth::Float])?;
+                effect_properties.set_supported_pixel_depths(&[BitDepth::Byte, BitDepth::Short, BitDepth::Float])?;
                 effect_properties.set_supported_contexts(&[ImageEffectContext::Filter])?;
                 effect_properties.set_supports_tiles(false)?;
 
@@ -737,7 +732,7 @@ impl Execute for GyroflowPlugin {
                 let opencl_devices = gyroflow_core::gpu::opencl::OclWrapper::list_devices();
                 let wgpu_devices = gyroflow_core::gpu::wgpu::WgpuWrapper::list_devices();
                 if !opencl_devices.is_empty() {
-                    effect_properties.set_opencl_render_supported("true")?;
+                    let _ = effect_properties.set_opencl_render_supported("true");
                 }
 
                 let _has_metal  = wgpu_devices.iter().any(|x| x.contains("(Metal)"));
@@ -745,9 +740,9 @@ impl Execute for GyroflowPlugin {
                 let _has_dx12   = wgpu_devices.iter().any(|x| x.contains("(Dx12)"));
 
                 #[cfg(any(target_os = "macos", target_os = "ios"))]
-                if _has_metal { effect_properties.set_metal_render_supported("true")?; }
+                if _has_metal { let _ = effect_properties.set_metal_render_supported("true"); }
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
-                if _has_vulkan || _has_dx12 { effect_properties.set_cuda_render_supported("true")?; }
+                if _has_vulkan || _has_dx12 { let _ = effect_properties.set_cuda_render_supported("true"); }
 
                 OK
             }
