@@ -65,6 +65,7 @@ impl CurrentFileInfo {
                                                 let path_fname = path.file_name().to_string_lossy().to_string();
                                                 if path_fname.starts_with(&fname) && path_fname.ends_with(".gyroflow") {
                                                     project_path = path.path();
+                                                    break;
                                                 }
                                             }
                                         }
