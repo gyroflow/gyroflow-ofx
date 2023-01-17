@@ -3,10 +3,10 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use parking_lot::Mutex;
 
-const FAILED_MSG: &str = "This feature is only available in Resolve and you have to allow executing scripts.\n
+const FAILED_MSG: &str = "This feature relies on external scripting and is only available in paid Resolve Studio. You have to allow executing scripts:\n
 Set \"Preferences -> General -> External scripting using\" to \"Local\".\n\n
-It must be the currently displayed video on the timeline.\n\n
-It is also impossible to query file path on a compound clip. In that case just select the video file using the \"Browse\" button.";
+It must be the currently displayed video on the timeline.\n
+It is also impossible to query file path on a compound clip.\n\nIn any case, you can just select the video or project file using the \"Browse\" button.";
 
 #[derive(Clone, Debug)]
 pub struct CurrentFileInfo {
@@ -20,16 +20,23 @@ pub struct CurrentFileInfo {
     pub pixel_aspect_ratio: String
 }
 impl CurrentFileInfo {
-    pub fn is_available() -> bool {
+    pub fn get_fuscript() -> Option<std::path::PathBuf> {
         if cfg!(target_os = "windows") {
-            std::path::Path::new("fuscript.exe").exists()
+            Some(std::path::Path::new("fuscript.exe").to_path_buf())
+        } else if cfg!(target_os = "macos") {
+            Some(std::path::Path::new("../Libraries/Fusion/fuscript").to_path_buf())
+        } else if cfg!(target_os = "linux") {
+            Some(std::path::Path::new("../libs/Fusion/fuscript").to_path_buf())
         } else {
-            std::path::Path::new("fuscript").exists()
+            None
         }
+    }
+    pub fn is_available() -> bool {
+        Self::get_fuscript().map(|x| x.exists()).unwrap_or_default()
     }
     pub fn query(current_file_info: Arc<Mutex<Option<Self>>>, current_file_info_pending: Arc<AtomicBool>) {
         std::thread::spawn(move || {
-            let mut cmd = std::process::Command::new("fuscript");
+            let mut cmd = std::process::Command::new(Self::get_fuscript().unwrap());
             #[cfg(target_os = "windows")]
             { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
 
