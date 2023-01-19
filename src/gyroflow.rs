@@ -39,6 +39,8 @@ struct InstanceData {
     param_dont_draw_outside: ParamHandle<Bool>,
     gyrodata: LruCache<String, Arc<StabilizationManager>>,
 
+    reload_values_from_project: bool,
+
     original_video_size: (usize, usize),
     original_output_size: (usize, usize),
 
@@ -107,7 +109,8 @@ impl InstanceData {
                 self.original_video_size = params.video_size;
                 self.original_output_size = params.video_output_size;
                 let loaded = params.duration_ms > 0.0;
-                if loaded {
+                if loaded && self.reload_values_from_project {
+                    self.reload_values_from_project = false;
                     let smoothness = stab.smoothing.read().current().get_parameter("smoothness");
 
                     self.param_fov.set_value(params.fov)?;
@@ -492,7 +495,8 @@ impl Execute for GyroflowPlugin {
                     original_output_size:           (0, 0),
                     original_video_size:            (0, 0),
                     current_file_info:              Arc::new(Mutex::new(None)),
-                    current_file_info_pending:      Arc::new(AtomicBool::new(false))
+                    current_file_info_pending:      Arc::new(AtomicBool::new(false)),
+                    reload_values_from_project:     false
                 })?;
 
                 OK
@@ -518,11 +522,17 @@ impl Execute for GyroflowPlugin {
                         if !v.is_empty() {
                             let project = effect.get_instance_data::<InstanceData>()?.param_project_path.get_value()?;
                             if !project.is_empty() {
-                                let _ = std::process::Command::new(v)
-                                    .args(["--open", &project])
-                                    .spawn();
+                                if cfg!(target_os = "macos") {
+                                    let _ = std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn();
+                                } else {
+                                    let _ = std::process::Command::new(v).args(["--open", &project]).spawn();
+                                }
                             } else {
-                                let _ = std::process::Command::new(v).spawn();
+                                if cfg!(target_os = "macos") {
+                                    let _ = std::process::Command::new("open").args(["-a", &v]).spawn();
+                                } else {
+                                    let _ = std::process::Command::new(v).spawn();
+                                }
                             }
                         }
                     } else {
@@ -538,7 +548,11 @@ impl Execute for GyroflowPlugin {
                     }
                 }
                 if in_args.get_name()? == "gyrodata" || in_args.get_name()? == "ReloadProject" || in_args.get_name()? == "DontDrawOutside" {
-                    effect.get_instance_data::<InstanceData>()?.gyrodata.clear();
+                    let instance_data = effect.get_instance_data::<InstanceData>()?;
+                    if in_args.get_name()? == "gyrodata" && in_args.get_change_reason()? == Change::UserEdited {
+                        instance_data.reload_values_from_project = true;
+                    }
+                    instance_data.gyrodata.clear();
                 }
                 if in_args.get_name()? == "LoadCurrent" {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
