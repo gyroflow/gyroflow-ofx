@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
-use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::KeyframeType };
+use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager } };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use measure_time::*;
@@ -31,9 +31,46 @@ struct KeyframableParams {
     rotation: ParamHandle<Double>,
     video_speed: ParamHandle<Double>,
     use_gyroflows_keyframes: ParamHandle<Bool>,
+    use_gyroflows_cached: bool,
+
+    cached_keyframes: KeyframeManager
 }
 unsafe impl Send for KeyframableParams { }
 unsafe impl Sync for KeyframableParams { }
+
+impl KeyframableParams {
+    pub fn cache_keyframes(&mut self, num_frames: usize, fps: f64) {
+        self.cached_keyframes.clear();
+        self.use_gyroflows_cached = self.use_gyroflows_keyframes.get_value().unwrap_or_default();
+        macro_rules! cache_key {
+            ($typ:expr, $param:expr, $scale:expr) => {
+                if $param.get_num_keys().unwrap_or_default() > 0 {
+                    for t in 0..num_frames {
+                        let time = t as f64;
+                        let timestamp_us = ((time / fps * 1_000_000.0)).round() as i64;
+
+                        if let Ok(v) = $param.get_value_at_time(time) {
+                            self.cached_keyframes.set(&$typ, timestamp_us, v / $scale);
+                        }
+                    }
+                } else {
+                    if let Ok(v) = $param.get_value() {
+                        self.cached_keyframes.set(&$typ, 0, v / $scale);
+                    }
+                }
+            };
+        }
+        cache_key!(KeyframeType::Fov,                       self.fov,                      1.0);
+        cache_key!(KeyframeType::SmoothingParamSmoothness,  self.smoothness,               1.0);
+        cache_key!(KeyframeType::LensCorrectionStrength,    self.lens_correction_strength, 100.0);
+        cache_key!(KeyframeType::LockHorizonAmount,         self.horizon_lock_amount,      1.0);
+        cache_key!(KeyframeType::LockHorizonRoll,           self.horizon_lock_roll,        1.0);
+        cache_key!(KeyframeType::VideoSpeed,                self.video_speed,              100.0);
+        cache_key!(KeyframeType::VideoRotation,             self.rotation,                 1.0);
+        cache_key!(KeyframeType::ZoomingCenterX,            self.positionx,                100.0);
+        cache_key!(KeyframeType::ZoomingCenterY,            self.positiony,                100.0);
+    }
+}
 
 #[allow(unused)]
 struct InstanceData {
@@ -56,6 +93,8 @@ struct InstanceData {
 
     original_video_size: (usize, usize),
     original_output_size: (usize, usize),
+    num_frames: usize,
+    fps: f64,
 
     current_file_info_pending: Arc<AtomicBool>,
     current_file_info: Arc<Mutex<Option<CurrentFileInfo>>>
@@ -77,6 +116,7 @@ impl InstanceData {
         let _ = self.param_toggle_overview.set_enabled(loaded);
         let _ = self.param_reload_project.set_enabled(loaded);
         let _ = self.param_status.set_label(if loaded { "OK" } else { "Project not loaded" });
+        let _ = self.param_status.set_value(loaded);
         let _ = self.param_open_in_gyroflow.set_label(if loaded { "Open in Gyroflow" } else { "Open Gyroflow" });
     }
 
@@ -121,20 +161,21 @@ impl InstanceData {
                     Error::UnknownError
                 })?;
             }
-            let org_fps = stab.params.read().fps;
 
             let loaded = {
                 stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read(), false, true);
                 let params = stab.params.read();
                 self.original_video_size = params.video_size;
                 self.original_output_size = params.video_output_size;
+                self.num_frames = params.frame_count;
+                self.fps = params.fps;
                 let loaded = params.duration_ms > 0.0;
                 if loaded && self.reload_values_from_project {
                     self.reload_values_from_project = false;
                     let smooth = stab.smoothing.read();
                     let smoothness = smooth.current().get_parameter("smoothness");
 
-                    let kparams = self.keyframable_params.write();
+                    let kparams = self.keyframable_params.read();
                     kparams.fov.set_value(params.fov)?;
                     kparams.smoothness.set_value(smoothness)?;
                     kparams.lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
@@ -156,7 +197,7 @@ impl InstanceData {
                                         $name.delete_all_keys()?;
                                         for (ts, v) in keys {
                                             let ts = if k == &KeyframeType::VideoSpeed { params.get_source_timestamp_at_ramped_timestamp(*ts) } else { *ts };
-                                            let time = (((ts as f64 / 1000.0) * org_fps) / 1000.0).round();
+                                            let time = (((ts as f64 / 1000.0) * params.fps) / 1000.0).round();
                                             $name.set_value_at_time(time, v.value * $scale)?;
                                         }
                                     };
@@ -177,6 +218,7 @@ impl InstanceData {
                         }
                     }
                 }
+                self.keyframable_params.write().cache_keyframes(self.num_frames, self.fps.max(1.0));
                 loaded
             };
 
@@ -226,20 +268,8 @@ impl InstanceData {
             let kparams = self.keyframable_params.clone();
             stab.keyframes.write().set_custom_provider(move |kf, typ, timestamp_ms| -> Option<f64> {
                 let params = kparams.read();
-                if params.use_gyroflows_keyframes.get_value().unwrap_or_default() && kf.is_keyframed_internally(typ) { return None; }
-                let time = ((timestamp_ms * org_fps) / 1000.0).round();
-                match typ {
-                    KeyframeType::Fov                      => params.fov                     .get_value_at_time(time).ok(),
-                    KeyframeType::SmoothingParamSmoothness => params.smoothness              .get_value_at_time(time).ok(),
-                    KeyframeType::LensCorrectionStrength   => params.lens_correction_strength.get_value_at_time(time).ok().map(|v| v / 100.0),
-                    KeyframeType::LockHorizonAmount        => params.horizon_lock_amount     .get_value_at_time(time).ok(),
-                    KeyframeType::LockHorizonRoll          => params.horizon_lock_roll       .get_value_at_time(time).ok(),
-                    KeyframeType::VideoSpeed               => params.video_speed             .get_value_at_time(time).ok().map(|v| v / 100.0),
-                    KeyframeType::VideoRotation            => params.rotation                .get_value_at_time(time).ok(),
-                    KeyframeType::ZoomingCenterX           => params.positionx               .get_value_at_time(time).ok().map(|v| v / 100.0),
-                    KeyframeType::ZoomingCenterY           => params.positiony               .get_value_at_time(time).ok().map(|v| v / 100.0),
-                    _ => None
-                }
+                if params.use_gyroflows_cached && kf.is_keyframed_internally(typ) { return None; }
+                params.cached_keyframes.value_at_video_timestamp(typ, timestamp_ms)
             });
 
             stab.invalidate_smoothing();
@@ -549,6 +579,8 @@ impl Execute for GyroflowPlugin {
                     gyrodata:                       LruCache::new(std::num::NonZeroUsize::new(8).unwrap()),
                     original_output_size:           (0, 0),
                     original_video_size:            (0, 0),
+                    num_frames:                     0,
+                    fps:                            0.0,
                     current_file_info:              Arc::new(Mutex::new(None)),
                     current_file_info_pending:      Arc::new(AtomicBool::new(false)),
                     reload_values_from_project:     false,
@@ -563,6 +595,8 @@ impl Execute for GyroflowPlugin {
                         positiony:                param_set.parameter("PositionY")?,
                         rotation:                 param_set.parameter("Rotation")?,
                         use_gyroflows_keyframes:  param_set.parameter("UseGyroflowsKeyframes")?,
+                        use_gyroflows_cached:     param_set.parameter::<Bool>("UseGyroflowsKeyframes")?.get_value()?,
+                        cached_keyframes:         KeyframeManager::default()
                     })),
                 })?;
 
@@ -632,6 +666,7 @@ impl Execute for GyroflowPlugin {
                         "PositionX" | "PositionY" | "Rotation" | "VideoSpeed" |
                         "UseGyroflowsKeyframes" | "RecalculateKeyframes" => {
                             let instance_data: &mut InstanceData = effect.get_instance_data()?;
+                            instance_data.keyframable_params.write().cache_keyframes(instance_data.num_frames, instance_data.fps.max(1.0));
                             for (_, v) in instance_data.gyrodata.iter_mut() {
                                 match in_args.get_name()?.as_ref() {
                                     "Smoothness" | "HorizonLockAmount" | "HorizonLockRoll" | "RecalculateKeyframes" => { v.recompute_smoothness(); v.recompute_adaptive_zoom(); },
