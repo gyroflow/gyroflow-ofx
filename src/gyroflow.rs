@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
-use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf } };
+use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::KeyframeType };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use measure_time::*;
 use ofx::*;
-use parking_lot::Mutex;
+use parking_lot::{ Mutex, RwLock };
 use super::fuscript::*;
 
 plugin_module!(
@@ -20,18 +20,31 @@ plugin_module!(
 #[derive(Default)]
 struct GyroflowPlugin { }
 
+struct KeyframableParams {
+    fov: ParamHandle<Double>,
+    smoothness: ParamHandle<Double>,
+    lens_correction_strength: ParamHandle<Double>,
+    horizon_lock_amount: ParamHandle<Double>,
+    horizon_lock_roll: ParamHandle<Double>,
+    positionx: ParamHandle<Double>,
+    positiony: ParamHandle<Double>,
+    rotation: ParamHandle<Double>,
+    video_speed: ParamHandle<Double>,
+    use_gyroflows_keyframes: ParamHandle<Bool>,
+}
+unsafe impl Send for KeyframableParams { }
+unsafe impl Sync for KeyframableParams { }
+
 #[allow(unused)]
 struct InstanceData {
     source_clip: ClipInstance,
     output_clip: ClipInstance,
 
+    keyframable_params: Arc<RwLock<KeyframableParams>>,
+
     param_project_data: ParamHandle<String>,
     param_project_path: ParamHandle<String>,
-    param_fov: ParamHandle<Double>,
-    param_smoothness: ParamHandle<Double>,
-    param_lens_correction_strength: ParamHandle<Double>,
     param_disable_stretch: ParamHandle<Bool>,
-    param_disable_rotation: ParamHandle<Bool>,
     param_status: ParamHandle<Bool>,
     param_open_in_gyroflow: ParamHandle<Bool>,
     param_toggle_overview: ParamHandle<Bool>,
@@ -50,10 +63,16 @@ struct InstanceData {
 
 impl InstanceData {
     fn update_loaded_state(&mut self, loaded: bool) {
-        let _ = self.param_fov.set_enabled(loaded);
-        let _ = self.param_smoothness.set_enabled(loaded);
-        let _ = self.param_lens_correction_strength.set_enabled(loaded);
-        let _ = self.param_disable_rotation.set_enabled(loaded);
+        let mut kparams = self.keyframable_params.write();
+        let _ = kparams.fov.set_enabled(loaded);
+        let _ = kparams.smoothness.set_enabled(loaded);
+        let _ = kparams.lens_correction_strength.set_enabled(loaded);
+        let _ = kparams.horizon_lock_amount.set_enabled(loaded);
+        let _ = kparams.horizon_lock_roll.set_enabled(loaded);
+        let _ = kparams.positionx.set_enabled(loaded);
+        let _ = kparams.positiony.set_enabled(loaded);
+        let _ = kparams.rotation.set_enabled(loaded);
+        let _ = kparams.video_speed.set_enabled(loaded);
         let _ = self.param_disable_stretch.set_enabled(loaded);
         let _ = self.param_toggle_overview.set_enabled(loaded);
         let _ = self.param_reload_project.set_enabled(loaded);
@@ -63,7 +82,6 @@ impl InstanceData {
 
     fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI, device: i32) -> Result<Arc<StabilizationManager>> {
         let disable_stretch = self.param_disable_stretch.get_value()?;
-        let disable_rotation = self.param_disable_rotation.get_value()?;
 
         let source_rect = self.source_clip.get_region_of_definition(0.0)?;
         let in_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize);
@@ -74,7 +92,7 @@ impl InstanceData {
             self.update_loaded_state(false);
             return Err(Error::UnknownError);
         }
-        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}{disable_rotation}{device}");
+        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}{device}");
         let stab = if let Some(stab) = self.gyrodata.get(&key) {
             stab.clone()
         } else {
@@ -103,19 +121,61 @@ impl InstanceData {
                     Error::UnknownError
                 })?;
             }
+            let org_fps = stab.params.read().fps;
 
             let loaded = {
+                stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read(), false, true);
                 let params = stab.params.read();
                 self.original_video_size = params.video_size;
                 self.original_output_size = params.video_output_size;
                 let loaded = params.duration_ms > 0.0;
                 if loaded && self.reload_values_from_project {
                     self.reload_values_from_project = false;
-                    let smoothness = stab.smoothing.read().current().get_parameter("smoothness");
+                    let smooth = stab.smoothing.read();
+                    let smoothness = smooth.current().get_parameter("smoothness");
 
-                    self.param_fov.set_value(params.fov)?;
-                    self.param_smoothness.set_value(smoothness)?;
-                    self.param_lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
+                    let kparams = self.keyframable_params.write();
+                    kparams.fov.set_value(params.fov)?;
+                    kparams.smoothness.set_value(smoothness)?;
+                    kparams.lens_correction_strength.set_value((params.lens_correction_amount * 100.0).min(100.0))?;
+                    kparams.horizon_lock_amount.set_value(if smooth.horizon_lock.lock_enabled { smooth.horizon_lock.horizonlockpercent } else { 0.0 })?;
+                    kparams.horizon_lock_roll.set_value(if smooth.horizon_lock.lock_enabled { smooth.horizon_lock.horizonroll } else { 0.0 })?;
+                    kparams.video_speed.set_value(params.video_speed * 100.0)?;
+                    kparams.positionx.set_value(params.adaptive_zoom_center_offset.0 * 100.0)?;
+                    kparams.positiony.set_value(params.adaptive_zoom_center_offset.1 * 100.0)?;
+                    kparams.rotation.set_value(params.video_rotation)?;
+
+                    let keyframes = stab.keyframes.read();
+                    let all_keys = keyframes.get_all_keys();
+                    kparams.use_gyroflows_keyframes.set_value(!all_keys.is_empty())?;
+                    for k in all_keys {
+                        if let Some(keys) = keyframes.get_keyframes(k) {
+                            if !keys.is_empty() {
+                                macro_rules! set_keys {
+                                    ($name:expr, $scale:expr) => {
+                                        $name.delete_all_keys()?;
+                                        for (ts, v) in keys {
+                                            let ts = if k == &KeyframeType::VideoSpeed { params.get_source_timestamp_at_ramped_timestamp(*ts) } else { *ts };
+                                            let time = (((ts as f64 / 1000.0) * org_fps) / 1000.0).round();
+                                            $name.set_value_at_time(time, v.value * $scale)?;
+                                        }
+                                    };
+                                }
+                                match k {
+                                    KeyframeType::Fov                      => { set_keys!(kparams.fov,                      1.0); },
+                                    KeyframeType::SmoothingParamSmoothness => { set_keys!(kparams.smoothness,               1.0); },
+                                    KeyframeType::LensCorrectionStrength   => { set_keys!(kparams.lens_correction_strength, 100.0); },
+                                    KeyframeType::LockHorizonAmount        => { set_keys!(kparams.horizon_lock_amount,      1.0); },
+                                    KeyframeType::LockHorizonRoll          => { set_keys!(kparams.horizon_lock_roll,        1.0); },
+                                    KeyframeType::VideoSpeed               => { set_keys!(kparams.video_speed,              100.0); },
+                                    KeyframeType::VideoRotation            => { set_keys!(kparams.rotation,                 1.0); },
+                                    KeyframeType::ZoomingCenterX           => { set_keys!(kparams.positionx,                100.0); },
+                                    KeyframeType::ZoomingCenterY           => { set_keys!(kparams.positiony,                100.0); },
+                                    _ => { }
+                                }
+                            }
+                        }
+                    }
                 }
                 loaded
             };
@@ -140,19 +200,19 @@ impl InstanceData {
                     }
                 }
             }
-            if disable_rotation {
-                stab.params.write().video_rotation = 0.0;
-            }
 
             stab.set_fov_overview(self.param_toggle_overview.get_value()?);
 
             let video_size = {
                 let mut params = stab.params.write();
                 params.framebuffer_inverted = true;
+                params.fov_overview_rect = true;
                 params.video_size
             };
 
             let org_ratio = video_size.0 as f64 / video_size.1 as f64;
+
+            stab.stabilization.write().kernel_flags.set(gyroflow_core::stabilization::KernelParamsFlags::DRAWING_ENABLED, true);
 
             let src_rect = Self::get_center_rect(in_size.0, in_size.1, org_ratio);
             stab.set_size(src_rect.2, src_rect.3);
@@ -163,9 +223,29 @@ impl InstanceData {
                 stab.interpolation = gyroflow_core::stabilization::Interpolation::Lanczos4;
             }
 
+            let kparams = self.keyframable_params.clone();
+            stab.keyframes.write().set_custom_provider(move |kf, typ, timestamp_ms| -> Option<f64> {
+                let params = kparams.read();
+                if params.use_gyroflows_keyframes.get_value().unwrap_or_default() && kf.is_keyframed_internally(typ) { return None; }
+                let time = ((timestamp_ms * org_fps) / 1000.0).round();
+                match typ {
+                    KeyframeType::Fov                      => params.fov                     .get_value_at_time(time).ok(),
+                    KeyframeType::SmoothingParamSmoothness => params.smoothness              .get_value_at_time(time).ok(),
+                    KeyframeType::LensCorrectionStrength   => params.lens_correction_strength.get_value_at_time(time).ok().map(|v| v / 100.0),
+                    KeyframeType::LockHorizonAmount        => params.horizon_lock_amount     .get_value_at_time(time).ok(),
+                    KeyframeType::LockHorizonRoll          => params.horizon_lock_roll       .get_value_at_time(time).ok(),
+                    KeyframeType::VideoSpeed               => params.video_speed             .get_value_at_time(time).ok().map(|v| v / 100.0),
+                    KeyframeType::VideoRotation            => params.rotation                .get_value_at_time(time).ok(),
+                    KeyframeType::ZoomingCenterX           => params.positionx               .get_value_at_time(time).ok().map(|v| v / 100.0),
+                    KeyframeType::ZoomingCenterY           => params.positiony               .get_value_at_time(time).ok().map(|v| v / 100.0),
+                    _ => None
+                }
+            });
+
             stab.invalidate_smoothing();
             stab.recompute_blocking();
-            stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read());
+            let inverse = !(self.keyframable_params.read().use_gyroflows_keyframes.get_value()? && stab.keyframes.read().is_keyframed_internally(&KeyframeType::VideoSpeed));
+            stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read(), inverse, inverse);
 
             self.gyrodata
                 .put(key.to_owned(), Arc::new(stab));
@@ -243,18 +323,11 @@ impl Execute for GyroflowPlugin {
                 let output_image = instance_data.output_clip.get_image_mut(time)?;
                 let output_image = output_image.borrow_mut();
 
-                let fov = instance_data.param_fov.get_value_at_time(time)?;
-                let lens_correction_strength = instance_data.param_lens_correction_strength.get_value_at_time(time)? / 100.0;
-                let smoothness = instance_data.param_smoothness.get_value_at_time(time)?;
-
                 let output_rect: RectI = output_image.get_region_of_definition()?;
 
                 let stab = instance_data.gyrodata(output_image.get_pixel_depth()?, output_rect, device)?;
 
                 let params = stab.params.read();
-                let params_fov = params.fov;
-                let params_lens_correction_strength = params.lens_correction_amount;
-                let params_smoothness = stab.smoothing.read().current().get_parameter("smoothness");
                 let fps = params.fps;
                 let src_fps = instance_data.source_clip.get_frame_rate().unwrap_or(fps);
                 let org_ratio = params.video_size.0 as f64 / params.video_size.1 as f64;
@@ -341,20 +414,6 @@ impl Execute for GyroflowPlugin {
 
                 // log::debug!("src_size: {src_size:?} | src_rect: {src_rect:?}");
                 // log::debug!("out_size: {out_size:?} | out_rect: {out_rect:?}");
-
-                if (params_fov - fov).abs() > 0.001 {
-                    stab.params.write().fov = fov;
-                    stab.recompute_undistortion();
-                }
-                if (params_lens_correction_strength - lens_correction_strength).abs() > 0.001 {
-                    stab.params.write().lens_correction_amount = lens_correction_strength;
-                    stab.recompute_adaptive_zoom();
-                    stab.recompute_undistortion();
-                }
-                if (params_smoothness - smoothness).abs() > 0.001 {
-                    stab.smoothing.write().current_mut().set_parameter("smoothness", smoothness);
-                    stab.recompute_blocking();
-                }
 
                 let mut buffers =
                     if in_args.get_opencl_enabled().unwrap_or_default() {
@@ -481,11 +540,7 @@ impl Execute for GyroflowPlugin {
                     output_clip,
                     param_project_data:             param_set.parameter("ProjectData")?,
                     param_project_path:             param_set.parameter("gyrodata")?,
-                    param_smoothness:               param_set.parameter("Smoothness")?,
-                    param_lens_correction_strength: param_set.parameter("LensCorrectionStrength")?,
-                    param_fov:                      param_set.parameter("FOV")?,
                     param_disable_stretch:          param_set.parameter("DisableStretch")?,
-                    param_disable_rotation:         param_set.parameter("DisableRotation")?,
                     param_status:                   param_set.parameter("Status")?,
                     param_open_in_gyroflow:         param_set.parameter("OpenGyroflow")?,
                     param_reload_project:           param_set.parameter("ReloadProject")?,
@@ -496,7 +551,19 @@ impl Execute for GyroflowPlugin {
                     original_video_size:            (0, 0),
                     current_file_info:              Arc::new(Mutex::new(None)),
                     current_file_info_pending:      Arc::new(AtomicBool::new(false)),
-                    reload_values_from_project:     false
+                    reload_values_from_project:     false,
+                    keyframable_params: Arc::new(RwLock::new(KeyframableParams {
+                        fov:                      param_set.parameter("FOV")?,
+                        smoothness:               param_set.parameter("Smoothness")?,
+                        lens_correction_strength: param_set.parameter("LensCorrectionStrength")?,
+                        horizon_lock_amount:      param_set.parameter("HorizonLockAmount")?,
+                        horizon_lock_roll:        param_set.parameter("HorizonLockRoll")?,
+                        video_speed:              param_set.parameter("VideoSpeed")?,
+                        positionx:                param_set.parameter("PositionX")?,
+                        positiony:                param_set.parameter("PositionY")?,
+                        rotation:                 param_set.parameter("Rotation")?,
+                        use_gyroflows_keyframes:  param_set.parameter("UseGyroflowsKeyframes")?,
+                    })),
                 })?;
 
                 OK
@@ -549,7 +616,7 @@ impl Execute for GyroflowPlugin {
                 }
                 if in_args.get_name()? == "gyrodata" || in_args.get_name()? == "ReloadProject" || in_args.get_name()? == "DontDrawOutside" {
                     let instance_data = effect.get_instance_data::<InstanceData>()?;
-                    if in_args.get_name()? == "gyrodata" && in_args.get_change_reason()? == Change::UserEdited {
+                    if in_args.get_name()? == "gyrodata" || in_args.get_name()? == "ReloadProject" {
                         instance_data.reload_values_from_project = true;
                     }
                     instance_data.gyrodata.clear();
@@ -558,7 +625,32 @@ impl Execute for GyroflowPlugin {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
                     CurrentFileInfo::query(instance_data.current_file_info.clone(), instance_data.current_file_info_pending.clone());
                 }
-
+                if in_args.get_change_reason()? == Change::UserEdited {
+                    match in_args.get_name()?.as_ref() {
+                        "FOV" | "Smoothness" | "LensCorrectionStrength" |
+                        "HorizonLockAmount" | "HorizonLockRoll" |
+                        "PositionX" | "PositionY" | "Rotation" | "VideoSpeed" |
+                        "UseGyroflowsKeyframes" | "RecalculateKeyframes" => {
+                            let instance_data: &mut InstanceData = effect.get_instance_data()?;
+                            for (_, v) in instance_data.gyrodata.iter_mut() {
+                                match in_args.get_name()?.as_ref() {
+                                    "Smoothness" | "HorizonLockAmount" | "HorizonLockRoll" | "RecalculateKeyframes" => { v.recompute_smoothness(); v.recompute_adaptive_zoom(); },
+                                    "LensCorrectionStrength" | "PositionX" | "PositionY" | "Rotation" => { v.recompute_adaptive_zoom(); },
+                                    _ => { }
+                                }
+                                v.recompute_undistortion();
+                                match in_args.get_name()?.as_ref() {
+                                    "VideoSpeed" | "UseGyroflowsKeyframes" | "RecalculateKeyframes" => {
+                                        let inverse = !(instance_data.keyframable_params.read().use_gyroflows_keyframes.get_value()? && v.keyframes.read().is_keyframed_internally(&KeyframeType::VideoSpeed));
+                                        v.params.write().calculate_ramped_timestamps(&v.keyframes.read(), inverse, inverse);
+                                    },
+                                    _ => { }
+                                }
+                            }
+                        },
+                        _ => { }
+                    }
+                }
 
                 if in_args.get_name()? == "ToggleOverview" && in_args.get_change_reason()? == Change::UserEdited {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
@@ -653,7 +745,6 @@ impl Execute for GyroflowPlugin {
                              .set_label("Adjust parameters")?;
 
                     let mut param = param_set.param_define_double("FOV")?;
-                    param.set_double_type(ParamDoubleType::Plain)?;
                     param.set_default(1.0)?;
                     param.set_display_min(0.1)?;
                     param.set_display_max(3.0)?;
@@ -663,7 +754,6 @@ impl Execute for GyroflowPlugin {
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_double("Smoothness")?;
-                    param.set_double_type(ParamDoubleType::Plain)?;
                     param.set_default(0.5)?;
                     param.set_display_min(0.01)?;
                     param.set_display_max(3.0)?;
@@ -673,7 +763,6 @@ impl Execute for GyroflowPlugin {
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_double("LensCorrectionStrength")?;
-                    param.set_double_type(ParamDoubleType::Plain)?;
                     param.set_default(100.0)?;
                     param.set_display_min(0.0)?;
                     param.set_display_max(100.0)?;
@@ -682,17 +771,77 @@ impl Execute for GyroflowPlugin {
                     let _ = param.set_script_name("LensCorrectionStrength");
                     param.set_parent("AdjustGroup")?;
 
+                    let mut param = param_set.param_define_double("HorizonLockAmount")?;
+                    param.set_default(0.0)?;
+                    param.set_display_min(0.0)?;
+                    param.set_display_max(100.0)?;
+                    param.set_label("Horizon lock")?;
+                    param.set_hint("Horizon lock amount")?;
+                    let _ = param.set_script_name("HorizonLockAmount");
+                    param.set_parent("AdjustGroup")?;
+
+                    let mut param = param_set.param_define_double("HorizonLockRoll")?;
+                    param.set_default(0.0)?;
+                    param.set_display_min(-100.0)?;
+                    param.set_display_max(100.0)?;
+                    param.set_label("Horizon roll")?;
+                    param.set_hint("Horizon lock roll adjustment")?;
+                    let _ = param.set_script_name("HorizonLockRoll");
+                    param.set_parent("AdjustGroup")?;
+
+                    let mut param = param_set.param_define_double("PositionX")?;
+                    param.set_default(0.0)?;
+                    param.set_display_min(-100.0)?;
+                    param.set_display_max(100.0)?;
+                    param.set_label("Position offset X")?;
+                    let _ = param.set_script_name("PositionX");
+                    param.set_parent("AdjustGroup")?;
+
+                    let mut param = param_set.param_define_double("PositionY")?;
+                    param.set_default(0.0)?;
+                    param.set_display_min(-100.0)?;
+                    param.set_display_max(100.0)?;
+                    param.set_label("Position offset Y")?;
+                    let _ = param.set_script_name("PositionY");
+                    param.set_parent("AdjustGroup")?;
+
+                    let mut param = param_set.param_define_double("Rotation")?;
+                    param.set_default(0.0)?;
+                    param.set_display_min(-360.0)?;
+                    param.set_display_max(360.0)?;
+                    param.set_label("Video rotation")?;
+                    let _ = param.set_script_name("Rotation");
+                    param.set_parent("AdjustGroup")?;
+
+                    let mut param = param_set.param_define_double("VideoSpeed")?;
+                    param.set_default(100.0)?;
+                    param.set_display_min(0.0001)?;
+                    param.set_display_max(1000.0)?;
+                    param.set_label("Video speed")?;
+                    param.set_hint("Use this slider to change video speed or keyframe it, instead of built-in speed changes in the editor")?;
+                    let _ = param.set_script_name("VideoSpeed");
+                    param.set_parent("AdjustGroup")?;
+
                     let mut param = param_set.param_define_boolean("DisableStretch")?;
                     param.set_label("Disable Gyroflow's stretch")?;
                     param.set_hint("If you used Input stretch in the lens profile in Gyroflow, and you de-stretched the video separately in Resolve, check this to disable Gyroflow's internal stretching.")?;
                     let _ = param.set_script_name("DisableStretch");
                     param.set_parent("AdjustGroup")?;
+                }
+                {
+                    param_set.param_define_group("KeyframesGroup")?
+                             .set_label("Keyframes")?;
 
-                    let mut param = param_set.param_define_boolean("DisableRotation")?;
-                    param.set_label("Disable Gyroflow's rotation")?;
-                    param.set_hint("If your video has rotation metadata, Gyroflow rotates it internally but so does the plugin, and it's rotated twice. Check this box in this case.")?;
-                    let _ = param.set_script_name("DisableRotation");
-                    param.set_parent("AdjustGroup")?;
+                    let mut param = param_set.param_define_boolean("UseGyroflowsKeyframes")?;
+                    param.set_label("Use Gyroflow's keyframes")?;
+                    let _ = param.set_script_name("UseGyroflowsKeyframes");
+                    param.set_hint("Use internal Gyroflow's keyframes, instead of the editor ones.")?;
+                    param.set_parent("KeyframesGroup")?;
+
+                    let mut param = param_set.param_define_button("RecalculateKeyframes")?;
+                    param.set_label("Recalculate keyframes")?;
+                    param.set_hint("Recalculate keyframes after adjusting the splines (in Fusion mode)")?;
+                    param.set_parent("KeyframesGroup")?;
                 }
 
                 let mut param = param_set.param_define_boolean("ToggleOverview")?;
@@ -715,6 +864,7 @@ impl Execute for GyroflowPlugin {
                     .set_children(&[
                         "ProjectGroup",
                         "AdjustGroup",
+                        "KeyframesGroup",
                         "ToggleOverview", "Status", "DontDrawOutside"
                     ])?;
 
