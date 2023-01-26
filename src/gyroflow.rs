@@ -248,13 +248,10 @@ impl InstanceData {
             let video_size = {
                 let mut params = stab.params.write();
                 params.framebuffer_inverted = true;
-                params.fov_overview_rect = true;
                 params.video_size
             };
 
             let org_ratio = video_size.0 as f64 / video_size.1 as f64;
-
-            stab.stabilization.write().kernel_flags.set(gyroflow_core::stabilization::KernelParamsFlags::DRAWING_ENABLED, true);
 
             let src_rect = Self::get_center_rect(in_size.0, in_size.1, org_ratio);
             stab.set_size(src_rect.2, src_rect.3);
@@ -666,6 +663,7 @@ impl Execute for GyroflowPlugin {
                         "PositionX" | "PositionY" | "Rotation" | "VideoSpeed" |
                         "UseGyroflowsKeyframes" | "RecalculateKeyframes" => {
                             let instance_data: &mut InstanceData = effect.get_instance_data()?;
+                            instance_data.param_status.set_label("Calculating...")?;
                             instance_data.keyframable_params.write().cache_keyframes(instance_data.num_frames, instance_data.fps.max(1.0));
                             for (_, v) in instance_data.gyrodata.iter_mut() {
                                 match in_args.get_name()?.as_ref() {
@@ -773,6 +771,13 @@ impl Execute for GyroflowPlugin {
                     param.set_label("Last saved project")?;
                     param.set_hint("Load most recently saved project in the Gyroflow app")?;
                     param.set_parent("ProjectGroup")?;
+
+                    let mut param = param_set.param_define_boolean("Status")?;
+                    param.set_label("Status")?;
+                    param.set_hint("Status")?;
+                    param.set_enabled(false)?;
+                    param.set_parent("ProjectGroup")?;
+
                 }
 
                 {
@@ -889,18 +894,13 @@ impl Execute for GyroflowPlugin {
                 let _ = param.set_script_name("DontDrawOutside");
                 param.set_hint("When clip and timeline aspect ratio don't match, draw the final image inside the source clip, instead of drawing outside it.")?;
 
-                let mut param = param_set.param_define_boolean("Status")?;
-                param.set_label("Status")?;
-                param.set_hint("Status")?;
-                param.set_enabled(false)?;
-
                 param_set
                     .param_define_page("Main")?
                     .set_children(&[
                         "ProjectGroup",
                         "AdjustGroup",
                         "KeyframesGroup",
-                        "ToggleOverview", "Status", "DontDrawOutside"
+                        "ToggleOverview", "DontDrawOutside"
                     ])?;
 
                 OK
