@@ -17,6 +17,13 @@ plugin_module!(
     GyroflowPlugin::default
 );
 
+// We should cache managers globally because it's common to have the effect applied to the same clip and cut the clip into multiple pieces
+// We don't want to create a new manager for each piece of the same clip
+// Cache key is specific enough
+lazy_static::lazy_static! {
+    static ref MANAGER_CACHE: Mutex<LruCache<String, Arc<StabilizationManager>>> = Mutex::new(LruCache::new(std::num::NonZeroUsize::new(8).unwrap()));
+}
+
 #[derive(Default)]
 struct GyroflowPlugin { }
 
@@ -87,6 +94,7 @@ struct InstanceData {
     param_toggle_overview: ParamHandle<Bool>,
     param_reload_project: ParamHandle<Bool>,
     param_dont_draw_outside: ParamHandle<Bool>,
+    param_include_project_data: ParamHandle<Bool>,
     gyrodata: LruCache<String, Arc<StabilizationManager>>,
 
     reload_values_from_project: bool,
@@ -120,10 +128,19 @@ impl InstanceData {
         let _ = self.param_open_in_gyroflow.set_label(if loaded { "Open in Gyroflow" } else { "Open Gyroflow" });
     }
 
-    fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI, device: i32) -> Result<Arc<StabilizationManager>> {
+    fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI) -> Result<Arc<StabilizationManager>> {
         let disable_stretch = self.param_disable_stretch.get_value()?;
 
         let source_rect = self.source_clip.get_region_of_definition(0.0)?;
+        let mut source_rect = RectI {
+            x1: source_rect.x1 as i32,
+            x2: source_rect.x2 as i32,
+            y1: source_rect.y1 as i32,
+            y2: source_rect.y2 as i32
+        };
+        if source_rect.x1 != output_rect.x1 || source_rect.x2 != output_rect.x2 || source_rect.y1 != output_rect.y1 || source_rect.y2 != output_rect.y2 {
+            source_rect = self.source_clip.get_image(0.0)?.get_bounds()?;
+        }
         let in_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize);
         let out_size = ((output_rect.x2 - output_rect.x1) as usize, (output_rect.y2 - output_rect.y1) as usize);
 
@@ -132,11 +149,26 @@ impl InstanceData {
             self.update_loaded_state(false);
             return Err(Error::UnknownError);
         }
-        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}{device}");
-        let stab = if let Some(stab) = self.gyrodata.get(&key) {
-            stab.clone()
+        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}");
+        let cloned = MANAGER_CACHE.lock().get(&key).map(Arc::clone);
+        let stab = if let Some(stab) = cloned {
+            // Cache it in this instance as well
+            if !self.gyrodata.contains(&key) {
+                self.gyrodata.put(key.to_owned(), stab.clone());
+            }
+            stab
         } else {
-            let stab = StabilizationManager::default();
+            let mut stab = StabilizationManager::default();
+            {
+                // Find first lens profile database with loaded profiles
+                let lock = MANAGER_CACHE.lock();
+                for (_, v) in lock.iter() {
+                    if v.lens_profile_db.read().loaded {
+                        stab.lens_profile_db = v.lens_profile_db.clone();
+                        break;
+                    }
+                }
+            }
 
             if !path.ends_with(".gyroflow") {
                 // Try to load from video file
@@ -148,7 +180,11 @@ impl InstanceData {
             } else {
                 let project_data = {
                     if let Ok(data) = std::fs::read_to_string(&path) {
-                        self.param_project_data.set_value(data.clone())?;
+                        if self.param_include_project_data.get_value()? {
+                            self.param_project_data.set_value(data.clone())?;
+                        } else {
+                            self.param_project_data.set_value("".to_string())?;
+                        }
                         data
                     } else {
                         self.param_project_data.get_value()?
@@ -259,6 +295,7 @@ impl InstanceData {
 
             {
                 let mut stab = stab.stabilization.write();
+                stab.share_wgpu_instances = true;
                 stab.interpolation = gyroflow_core::stabilization::Interpolation::Lanczos4;
             }
 
@@ -274,9 +311,15 @@ impl InstanceData {
             let inverse = !(self.keyframable_params.read().use_gyroflows_keyframes.get_value()? && stab.keyframes.read().is_keyframed_internally(&KeyframeType::VideoSpeed));
             stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read(), inverse, inverse);
 
-            self.gyrodata
+            // Insert to static global cache
+            let mut lock = MANAGER_CACHE.lock();
+            lock
                 .put(key.to_owned(), Arc::new(stab));
-            self.gyrodata
+
+            // Cache it in this instance as well
+            self.gyrodata.put(key.to_owned(), lock.get(&key).unwrap().clone());
+
+            lock
                 .get(&key)
                 .map(Arc::clone)
                 .ok_or(Error::UnknownError)?
@@ -321,6 +364,21 @@ impl InstanceData {
             (0, 0, width, height)
         }
     }
+
+    pub fn clear_stab(&mut self) {
+        let local_keys = self.gyrodata.iter().map(|x| x.0.clone()).collect::<Vec<_>>();
+        self.gyrodata.clear();
+
+        // If there are no more local references, delete it from global cache
+        let mut lock = MANAGER_CACHE.lock();
+        for key in local_keys {
+            if let Some(v) = lock.get(&key) {
+                if Arc::strong_count(v) == 1 {
+                    lock.pop(&key);
+                }
+            }
+        }
+    }
 }
 
 struct PerFrameParams { }
@@ -336,12 +394,6 @@ impl Execute for GyroflowPlugin {
             Render(ref mut effect, ref in_args) => {
                 let _time = std::time::Instant::now();
 
-                let mut device = -1;
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
-                if in_args.get_cuda_enabled().unwrap_or_default() {
-                    device = gyroflow_core::gpu::wgpu_interop_cuda::get_current_cuda_device();
-                }
-
                 let time = in_args.get_time()?;
                 let instance_data: &mut InstanceData = effect.get_instance_data()?;
 
@@ -352,7 +404,7 @@ impl Execute for GyroflowPlugin {
 
                 let output_rect: RectI = output_image.get_region_of_definition()?;
 
-                let stab = instance_data.gyrodata(output_image.get_pixel_depth()?, output_rect, device)?;
+                let stab = instance_data.gyrodata(output_image.get_pixel_depth()?, output_rect)?;
 
                 let params = stab.params.read();
                 let fps = params.fps;
@@ -573,7 +625,8 @@ impl Execute for GyroflowPlugin {
                     param_reload_project:           param_set.parameter("ReloadProject")?,
                     param_toggle_overview:          param_set.parameter("ToggleOverview")?,
                     param_dont_draw_outside:        param_set.parameter("DontDrawOutside")?,
-                    gyrodata:                       LruCache::new(std::num::NonZeroUsize::new(8).unwrap()),
+                    param_include_project_data:     param_set.parameter("IncludeProjectData")?,
+                    gyrodata:                       LruCache::new(std::num::NonZeroUsize::new(20).unwrap()),
                     original_output_size:           (0, 0),
                     original_video_size:            (0, 0),
                     num_frames:                     0,
@@ -650,7 +703,20 @@ impl Execute for GyroflowPlugin {
                     if in_args.get_name()? == "gyrodata" || in_args.get_name()? == "ReloadProject" {
                         instance_data.reload_values_from_project = true;
                     }
-                    instance_data.gyrodata.clear();
+                    instance_data.clear_stab();
+                }
+                if in_args.get_name()? == "IncludeProjectData" {
+                    let instance_data = effect.get_instance_data::<InstanceData>()?;
+                    let path = instance_data.param_project_path.get_value()?;
+                    if path.ends_with(".gyroflow") && instance_data.param_include_project_data.get_value()? {
+                        if let Ok(data) = std::fs::read_to_string(&path) {
+                            instance_data.param_project_data.set_value(data.clone())?;
+                        } else {
+                            instance_data.param_project_data.set_value("".to_string())?;
+                        }
+                    } else {
+                        instance_data.param_project_data.set_value("".to_string())?;
+                    }
                 }
                 if in_args.get_name()? == "LoadCurrent" {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
@@ -713,11 +779,11 @@ impl Execute for GyroflowPlugin {
             }
 
             DestroyInstance(ref mut effect) => {
-                effect.get_instance_data::<InstanceData>()?.gyrodata.clear();
+                effect.get_instance_data::<InstanceData>()?.clear_stab();
                 OK
             },
             PurgeCaches(ref mut effect) => {
-                effect.get_instance_data::<InstanceData>()?.gyrodata.clear();
+                effect.get_instance_data::<InstanceData>()?.clear_stab();
                 OK
             },
 
@@ -894,22 +960,30 @@ impl Execute for GyroflowPlugin {
                 let _ = param.set_script_name("DontDrawOutside");
                 param.set_hint("When clip and timeline aspect ratio don't match, draw the final image inside the source clip, instead of drawing outside it.")?;
 
+                let mut param = param_set.param_define_boolean("IncludeProjectData")?;
+                param.set_label("Embed .gyroflow data in plugin")?;
+                param.set_hint("If you intend to share the project to someone else, the plugin can embed the Gyroflow project data including gyro data inside the video editor project. This way you don't have to share .gyroflow project files. Enabling this option will make the project bigger.")?;
+
                 param_set
                     .param_define_page("Main")?
                     .set_children(&[
                         "ProjectGroup",
                         "AdjustGroup",
                         "KeyframesGroup",
-                        "ToggleOverview", "DontDrawOutside"
+                        "ToggleOverview", "DontDrawOutside", "IncludeProjectData"
                     ])?;
 
                 OK
             }
 
             Describe(ref mut effect) => {
-                // log::info!("host supports opencl: {:?}", _plugin_context.get_host().get_opencl_render_supported());
-                // log::info!("host supports cuda: {:?}", _plugin_context.get_host().get_cuda_render_supported());
-                // log::info!("host supports metal: {:?}", _plugin_context.get_host().get_metal_render_supported());
+                log::info!("Host supports OpenGL: {:?}", _plugin_context.get_host().get_opengl_render_supported());
+                log::info!("Host supports OpenCL: {:?}", _plugin_context.get_host().get_opencl_render_supported());
+                log::info!("Host supports CUDA: {:?}", _plugin_context.get_host().get_cuda_render_supported());
+                log::info!("Host supports Metal: {:?}", _plugin_context.get_host().get_metal_render_supported());
+                if _plugin_context.get_host().get_opencl_render_supported().unwrap_or_default() != "true" {
+                    std::env::set_var("NO_OPENCL", "1");
+                }
 
                 let mut effect_properties: EffectDescriptor = effect.properties()?;
                 effect_properties.set_grouping("Warp")?;
