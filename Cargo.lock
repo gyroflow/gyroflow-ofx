@@ -1149,7 +1149,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.4.2"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=82cb54d#82cb54df97e7a831a3c8b9168c7e2bd02855c495"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=f820186#f820186b6fcffad8640847075ec24c456b4b850c"
 dependencies = [
  "ahrs",
  "akaze",
@@ -3071,9 +3071,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "0.7.5"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae41ecad2489a1655c8ef8489444b0b113c0a0c795944a3572a0931cf7d2525c"
+checksum = "feff0a412894d67223777b6cc8d68c0dab06d52d95e9890d5f2d47f10dd9366c"
 dependencies = [
  "bytemuck",
  "safe_arch",
