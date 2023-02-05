@@ -172,10 +172,29 @@ impl InstanceData {
 
             if !path.ends_with(".gyroflow") {
                 // Try to load from video file
-                if let Err(e) = stab.load_video_file(&path, None) {
-                    log::error!("An error occured: {e:?}");
-                    self.update_loaded_state(false);
-                    return Err(Error::UnknownError);
+                match stab.load_video_file(&path, None) {
+                    Ok(_) => {
+                        if self.param_include_project_data.get_value()? {
+                            if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
+                                self.param_project_data.set_value(data)?;
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        let embedded_data = self.param_project_data.get_value()?;
+                        if !embedded_data.is_empty() {
+                            let mut is_preset = false;
+                            stab.import_gyroflow_data(embedded_data.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
+                                error!("load_gyro_data error: {}", &e);
+                                self.update_loaded_state(false);
+                                Error::UnknownError
+                            })?;
+                        } else {
+                            log::error!("An error occured: {e:?}");
+                            self.update_loaded_state(false);
+                            return Err(Error::UnknownError);
+                        }
+                    }
                 }
             } else {
                 let project_data = {
@@ -708,11 +727,19 @@ impl Execute for GyroflowPlugin {
                 if in_args.get_name()? == "IncludeProjectData" {
                     let instance_data = effect.get_instance_data::<InstanceData>()?;
                     let path = instance_data.param_project_path.get_value()?;
-                    if path.ends_with(".gyroflow") && instance_data.param_include_project_data.get_value()? {
-                        if let Ok(data) = std::fs::read_to_string(&path) {
-                            instance_data.param_project_data.set_value(data.clone())?;
+                    if instance_data.param_include_project_data.get_value()? {
+                        if path.ends_with(".gyroflow") {
+                            if let Ok(data) = std::fs::read_to_string(&path) {
+                                instance_data.param_project_data.set_value(data.clone())?;
+                            } else {
+                                instance_data.param_project_data.set_value("".to_string())?;
+                            }
                         } else {
-                            instance_data.param_project_data.set_value("".to_string())?;
+                            if let Some((_, stab)) = instance_data.gyrodata.peek_lru() {
+                                if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
+                                    instance_data.param_project_data.set_value(data)?;
+                                }
+                            }
                         }
                     } else {
                         instance_data.param_project_data.set_value("".to_string())?;
