@@ -730,7 +730,15 @@ impl Execute for GyroflowPlugin {
                     if instance_data.param_include_project_data.get_value()? {
                         if path.ends_with(".gyroflow") {
                             if let Ok(data) = std::fs::read_to_string(&path) {
-                                instance_data.param_project_data.set_value(data.clone())?;
+                                if !data.contains("\"raw_imu\": null") || !data.contains("\"quaternions\": null") {
+                                    instance_data.param_project_data.set_value(data.clone())?;
+                                } else {
+                                    if let Some((_, stab)) = instance_data.gyrodata.peek_lru() {
+                                        if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
+                                            instance_data.param_project_data.set_value(data)?;
+                                        }
+                                    }
+                                }
                             } else {
                                 instance_data.param_project_data.set_value("".to_string())?;
                             }
