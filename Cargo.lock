@@ -144,9 +144,9 @@ checksum = "64cb94155d965e3d37ffbbe7cc5b82c3dd79dd33bd48e536f73d2cfb8d85506f"
 
 [[package]]
 name = "argmin"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f55c3d3a0aedc2017286d1f154ace0dabd6a61cdc8ee29b7db0e851a0200b14c"
+checksum = "897c18cfe995220bdd94a27455e5afedc7c688cbf62ad2be88ce7552452aa1b2"
 dependencies = [
  "anyhow",
  "argmin-math",
@@ -451,16 +451,16 @@ dependencies = [
 [[package]]
 name = "cl-sys"
 version = "0.4.2"
-source = "git+https://github.com/AdrianEddy/ocl#c7a0503e36fd9ddedb0226901d97fcf5a190ced3"
+source = "git+https://github.com/cogciprocate/ocl#d0f4b61a872cb7e7fb4c04091a0d34ba774c6ec6"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "clang-sys"
-version = "1.4.0"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa2e27ae6ab525c3d369ded447057bca5438d86dc3a68f6faafb8269ba82ebf3"
+checksum = "77ed9a53e5d4d9c573ae844bfac6872b159cb1d1585a83b29e7a64b7eef7332a"
 dependencies = [
  "glob",
  "libc",
@@ -1042,9 +1042,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "glow"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8edf6019dff2d92ad27c1e3ff82ad50a0aea5b01370353cc928bfdc33e95925c"
+checksum = "4e007a07a24de5ecae94160f141029e9a347282cfe25d1d58d85d845cf3130f1"
 dependencies = [
  "js-sys",
  "slotmap",
@@ -1136,7 +1136,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.4.2"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=9b47413#9b474134c70044246d50716518967c9918c34247"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=98c6982#98c69822c15d6b3e18a0ba3d0a4a51987a894a8b"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1192,7 +1192,7 @@ dependencies = [
  "simple-easing",
  "space",
  "telemetry-parser",
- "time 0.3.18",
+ "time 0.3.19",
  "walkdir",
  "wgpu",
  "wgpu-hal",
@@ -1956,7 +1956,7 @@ dependencies = [
 [[package]]
 name = "ocl"
 version = "0.19.4"
-source = "git+https://github.com/AdrianEddy/ocl#c7a0503e36fd9ddedb0226901d97fcf5a190ced3"
+source = "git+https://github.com/cogciprocate/ocl#d0f4b61a872cb7e7fb4c04091a0d34ba774c6ec6"
 dependencies = [
  "futures",
  "nodrop",
@@ -1969,7 +1969,7 @@ dependencies = [
 [[package]]
 name = "ocl-core"
 version = "0.11.3"
-source = "git+https://github.com/AdrianEddy/ocl#c7a0503e36fd9ddedb0226901d97fcf5a190ced3"
+source = "git+https://github.com/cogciprocate/ocl#d0f4b61a872cb7e7fb4c04091a0d34ba774c6ec6"
 dependencies = [
  "bitflags",
  "cl-sys",
@@ -1984,7 +1984,7 @@ dependencies = [
 [[package]]
 name = "ocl-core-vector"
 version = "0.1.1"
-source = "git+https://github.com/AdrianEddy/ocl#c7a0503e36fd9ddedb0226901d97fcf5a190ced3"
+source = "git+https://github.com/cogciprocate/ocl#d0f4b61a872cb7e7fb4c04091a0d34ba774c6ec6"
 dependencies = [
  "num-traits 0.2.15",
 ]
@@ -1992,7 +1992,7 @@ dependencies = [
 [[package]]
 name = "ocl-interop"
 version = "0.1.5"
-source = "git+https://github.com/AdrianEddy/ocl#c7a0503e36fd9ddedb0226901d97fcf5a190ced3"
+source = "git+https://github.com/cogciprocate/ocl#d0f4b61a872cb7e7fb4c04091a0d34ba774c6ec6"
 dependencies = [
  "cgl",
  "gl_generator",
@@ -2190,9 +2190,9 @@ checksum = "74605f360ce573babfe43964cbe520294dcb081afbf8c108fc6e23036b4da2df"
 
 [[package]]
 name = "prost"
-version = "0.11.6"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21dc42e00223fc37204bd4aa177e69420c604ca4a183209a8f9de30c6d934698"
+checksum = "3933d3ac2717077b3d5f42b40f59edfb1fb6a8c14e1c7de0f38075c4bac8e314"
 dependencies = [
  "bytes",
  "prost-derive",
@@ -2200,9 +2200,9 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.11.6"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bda8c0881ea9f722eb9629376db3d0b903b462477c1aafcb0566610ac28ac5d"
+checksum = "8e9935362e8369bc3acd874caeeae814295c504c2bdbcde5c024089cf8b4dc12"
 dependencies = [
  "anyhow",
  "itertools",
@@ -2629,9 +2629,9 @@ checksum = "ab16ced94dbd8a46c82fd81e3ed9a8727dac2977ea869d217bcc4ea1f122e81f"
 
 [[package]]
 name = "syn"
-version = "1.0.107"
+version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4064b5b16e03ae50984a5a8ed5d4f8803e6bc1fd170a3cda91a1be4b18e3f5"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2742,9 +2742,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.18"
+version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af0097eaf301d576d0b2aead7a59facab6d53cc636340f0291fab8446a2e8613"
+checksum = "53250a3b3fed8ff8fd988587d8925d26a83ac3845d9e03b220b37f34c2b8d6c2"
 dependencies = [
  "libc",
  "num_threads",
@@ -3046,9 +3046,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "0.7.6"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "feff0a412894d67223777b6cc8d68c0dab06d52d95e9890d5f2d47f10dd9366c"
+checksum = "b3c11d2adfe89e9da42f01023d2c2998c53aa916ef4d26ca716dbb983725c0d2"
 dependencies = [
  "bytemuck",
  "safe_arch",
