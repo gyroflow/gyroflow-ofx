@@ -86,6 +86,7 @@ struct InstanceData {
 
     keyframable_params: Arc<RwLock<KeyframableParams>>,
 
+    param_instance_id: ParamHandle<String>,
     param_project_data: ParamHandle<String>,
     param_project_path: ParamHandle<String>,
     param_disable_stretch: ParamHandle<Bool>,
@@ -103,9 +104,15 @@ struct InstanceData {
     original_output_size: (usize, usize),
     num_frames: usize,
     fps: f64,
+    ever_changed: bool,
 
     current_file_info_pending: Arc<AtomicBool>,
     current_file_info: Arc<Mutex<Option<CurrentFileInfo>>>
+}
+impl Drop for InstanceData {
+    fn drop(&mut self) {
+        self.clear_stab();
+    }
 }
 
 impl InstanceData {
@@ -144,12 +151,13 @@ impl InstanceData {
         let in_size = ((source_rect.x2 - source_rect.x1) as usize, (source_rect.y2 - source_rect.y1) as usize);
         let out_size = ((output_rect.x2 - output_rect.x1) as usize, (output_rect.y2 - output_rect.y1) as usize);
 
+        let instance_id = self.param_instance_id.get_value()?;
         let path = self.param_project_path.get_value()?;
         if path.is_empty() {
             self.update_loaded_state(false);
             return Err(Error::UnknownError);
         }
-        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}");
+        let key = format!("{path}{bit_depth:?}{in_size:?}{out_size:?}{disable_stretch}{instance_id}");
         let cloned = MANAGER_CACHE.lock().get(&key).map(Arc::clone);
         let stab = if let Some(stab) = cloned {
             // Cache it in this instance as well
@@ -330,18 +338,13 @@ impl InstanceData {
             let inverse = !(self.keyframable_params.read().use_gyroflows_keyframes.get_value()? && stab.keyframes.read().is_keyframed_internally(&KeyframeType::VideoSpeed));
             stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read(), inverse, inverse);
 
+            let stab = Arc::new(stab);
             // Insert to static global cache
-            let mut lock = MANAGER_CACHE.lock();
-            lock
-                .put(key.to_owned(), Arc::new(stab));
-
+            MANAGER_CACHE.lock().put(key.to_owned(), stab.clone());
             // Cache it in this instance as well
-            self.gyrodata.put(key.to_owned(), lock.get(&key).unwrap().clone());
+            self.gyrodata.put(key.to_owned(), stab.clone());
 
-            lock
-                .get(&key)
-                .map(Arc::clone)
-                .ok_or(Error::UnknownError)?
+            stab
         };
 
         Ok(stab)
@@ -633,9 +636,10 @@ impl Execute for GyroflowPlugin {
                 let source_clip = effect.get_simple_input_clip()?;
                 let output_clip = effect.get_output_clip()?;
 
-                effect.set_instance_data(InstanceData {
+                let mut instance_data = InstanceData {
                     source_clip,
                     output_clip,
+                    param_instance_id:              param_set.parameter("InstanceId")?,
                     param_project_data:             param_set.parameter("ProjectData")?,
                     param_project_path:             param_set.parameter("gyrodata")?,
                     param_disable_stretch:          param_set.parameter("DisableStretch")?,
@@ -653,6 +657,7 @@ impl Execute for GyroflowPlugin {
                     current_file_info:              Arc::new(Mutex::new(None)),
                     current_file_info_pending:      Arc::new(AtomicBool::new(false)),
                     reload_values_from_project:     false,
+                    ever_changed: false,
                     keyframable_params: Arc::new(RwLock::new(KeyframableParams {
                         fov:                      param_set.parameter("FOV")?,
                         smoothness:               param_set.parameter("Smoothness")?,
@@ -667,7 +672,13 @@ impl Execute for GyroflowPlugin {
                         use_gyroflows_cached:     param_set.parameter::<Bool>("UseGyroflowsKeyframes")?.get_value()?,
                         cached_keyframes:         KeyframeManager::default()
                     })),
-                })?;
+                };
+                if instance_data.param_instance_id.get_value()?.is_empty() {
+                    instance_data.ever_changed = true;
+                    instance_data.param_instance_id.set_value(format!("{}", fastrand::u64(..)))?;
+                }
+
+                effect.set_instance_data(instance_data)?;
 
                 OK
             }
@@ -765,6 +776,11 @@ impl Execute for GyroflowPlugin {
                         "UseGyroflowsKeyframes" | "RecalculateKeyframes" => {
                             let instance_data: &mut InstanceData = effect.get_instance_data()?;
                             instance_data.param_status.set_label("Calculating...")?;
+                            if !instance_data.ever_changed {
+                                instance_data.ever_changed = true;
+                                instance_data.param_instance_id.set_value(format!("{}", fastrand::u64(..)))?;
+                                instance_data.clear_stab();
+                            }
                             instance_data.keyframable_params.write().cache_keyframes(instance_data.num_frames, instance_data.fps.max(1.0));
                             for (_, v) in instance_data.gyrodata.iter_mut() {
                                 match in_args.get_name()?.as_ref() {
@@ -834,6 +850,9 @@ impl Execute for GyroflowPlugin {
                 {
                     param_set.param_define_group("ProjectGroup")?
                              .set_label("Gyroflow project")?;
+
+                    param_set.param_define_string("InstanceId")?
+                             .set_secret(true)?;
 
                     let mut param = param_set.param_define_string("ProjectData")?;
                     let _ = param.set_script_name("ProjectData");

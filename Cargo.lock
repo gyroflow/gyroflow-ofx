@@ -1136,7 +1136,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.4.2"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=0d21520#0d21520b66ae61856acb0f38a4ce5a4f5347f5db"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=841e178#841e178d2891c91d817db34a44066922a4c5419d"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1205,6 +1205,7 @@ dependencies = [
 name = "gyroflow-ofx"
 version = "1.0.10"
 dependencies = [
+ "fastrand",
  "gyroflow-core",
  "itertools",
  "lazy_static",
@@ -3046,9 +3047,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "0.7.7"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3c11d2adfe89e9da42f01023d2c2998c53aa916ef4d26ca716dbb983725c0d2"
+checksum = "b689b6c49d6549434bf944e6b0f39238cf63693cb7a147e9d887507fffa3b223"
 dependencies = [
  "bytemuck",
  "safe_arch",
