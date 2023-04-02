@@ -5,7 +5,6 @@ use std::sync::atomic::Ordering::SeqCst;
 use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager } };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
-use measure_time::*;
 use ofx::*;
 use parking_lot::{ Mutex, RwLock };
 use super::fuscript::*;
@@ -193,7 +192,7 @@ impl InstanceData {
                         if !embedded_data.is_empty() {
                             let mut is_preset = false;
                             stab.import_gyroflow_data(embedded_data.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
-                                error!("load_gyro_data error: {}", &e);
+                                log::error!("load_gyro_data error: {}", &e);
                                 self.update_loaded_state(false);
                                 Error::UnknownError
                             })?;
@@ -219,7 +218,7 @@ impl InstanceData {
                 };
                 let mut is_preset = false;
                 stab.import_gyroflow_data(project_data.as_bytes(), true, Some(std::path::PathBuf::from(path)), |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
-                    error!("load_gyro_data error: {}", &e);
+                    log::error!("load_gyro_data error: {}", &e);
                     self.update_loaded_state(false);
                     Error::UnknownError
                 })?;
