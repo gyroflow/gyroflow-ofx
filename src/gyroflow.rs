@@ -87,6 +87,8 @@ struct InstanceData {
 
     param_instance_id: ParamHandle<String>,
     param_project_data: ParamHandle<String>,
+    param_embedded_lens: ParamHandle<String>,
+    param_embedded_preset: ParamHandle<String>,
     param_project_path: ParamHandle<String>,
     param_disable_stretch: ParamHandle<Bool>,
     param_status: ParamHandle<Bool>,
@@ -95,6 +97,7 @@ struct InstanceData {
     param_reload_project: ParamHandle<Bool>,
     param_dont_draw_outside: ParamHandle<Bool>,
     param_include_project_data: ParamHandle<Bool>,
+    param_input_rotation: ParamHandle<Double>,
     gyrodata: LruCache<String, Arc<StabilizationManager>>,
 
     reload_values_from_project: bool,
@@ -134,7 +137,7 @@ impl InstanceData {
         let _ = self.param_open_in_gyroflow.set_label(if loaded { "Open in Gyroflow" } else { "Open Gyroflow" });
     }
 
-    fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI) -> Result<Arc<StabilizationManager>> {
+    fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI, loading_pending_video_file: bool) -> Result<Arc<StabilizationManager>> {
         let disable_stretch = self.param_disable_stretch.get_value()?;
 
         let source_rect = self.source_clip.get_region_of_definition(0.0)?;
@@ -180,11 +183,38 @@ impl InstanceData {
             if !path.ends_with(".gyroflow") {
                 // Try to load from video file
                 match stab.load_video_file(&path, None) {
-                    Ok(_) => {
+                    Ok(md) => {
                         if self.param_include_project_data.get_value()? {
                             if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
                                 self.param_project_data.set_value(data)?;
                             }
+                        }
+                        if md.rotation != 0 {
+                            let r = ((360 - md.rotation) % 360) as f64;
+                            self.param_input_rotation.set_value(r)?;
+                            stab.params.write().video_rotation = r;
+                        }
+                        if let Ok(d) = self.param_embedded_lens.get_value() {
+                            if !d.is_empty() {
+                                if let Err(e) = stab.load_lens_profile(&d) {
+                                    rfd::MessageDialog::new()
+                                        .set_description(&format!("Failed to load lens profile: {e:?}"))
+                                        .show();
+                                }
+                            }
+                        }
+                        if let Ok(d) = self.param_embedded_preset.get_value() {
+                            if !d.is_empty() {
+                                let mut is_preset = false;
+                                if let Err(e) = stab.import_gyroflow_data(d.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset) {
+                                    rfd::MessageDialog::new()
+                                        .set_description(&format!("Failed to load preset: {e:?}"))
+                                        .show();
+                                }
+                            }
+                        }
+                        if !stab.gyro.read().has_accurate_timestamps && loading_pending_video_file {
+                            self.open_gyroflow();
                         }
                     },
                     Err(e) => {
@@ -199,6 +229,11 @@ impl InstanceData {
                         } else {
                             log::error!("An error occured: {e:?}");
                             self.update_loaded_state(false);
+                            self.param_status.set_label("Failed to load file info!")?;
+                            self.param_status.set_hint(&format!("Error loading {path}: {e:?}."))?;
+                            if loading_pending_video_file {
+                                self.open_gyroflow();
+                            }
                             return Err(Error::UnknownError);
                         }
                     }
@@ -349,7 +384,7 @@ impl InstanceData {
         Ok(stab)
     }
 
-    pub fn check_pending_file_info(&mut self) -> Result<()> {
+    pub fn check_pending_file_info(&mut self) -> Result<bool> { // -> is_video_file
         if self.current_file_info_pending.load(SeqCst) {
             self.current_file_info_pending.store(false, SeqCst);
             let lock = self.current_file_info.lock();
@@ -359,10 +394,11 @@ impl InstanceData {
                 } else {
                     // Try to use the video directly
                     self.param_project_path.set_value(current_file.file_path.clone())?;
+                    return Ok(true);
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     fn get_center_rect(width: usize, height: usize, org_ratio: f64) -> (usize, usize, usize, usize) {
@@ -400,6 +436,30 @@ impl InstanceData {
             }
         }
     }
+
+    pub fn open_gyroflow(&self) {
+        if let Some(v) = gyroflow_core::util::get_setting("exeLocation") {
+            if !v.is_empty() {
+                if let Ok(project) = self.param_project_path.get_value() {
+                    if !project.is_empty() {
+                        if cfg!(target_os = "macos") {
+                            let _ = std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn();
+                        } else {
+                            let _ = std::process::Command::new(v).args(["--open", &project]).spawn();
+                        }
+                    } else {
+                        if cfg!(target_os = "macos") {
+                            let _ = std::process::Command::new("open").args(["-a", &v]).spawn();
+                        } else {
+                            let _ = std::process::Command::new(v).spawn();
+                        }
+                    }
+                }
+            }
+        } else {
+            rfd::MessageDialog::new().set_description("Unable to find Gyroflow app path. Make sure to run Gyroflow app at least once and that version is at least v1.4.3").show();
+        }
+    }
 }
 
 struct PerFrameParams { }
@@ -409,8 +469,6 @@ impl Execute for GyroflowPlugin {
     fn execute(&mut self, _plugin_context: &PluginContext, action: &mut Action) -> Result<Int> {
         use Action::*;
 
-        // log::debug!("action: {action:?}");
-
         match *action {
             Render(ref mut effect, ref in_args) => {
                 let _time = std::time::Instant::now();
@@ -418,22 +476,22 @@ impl Execute for GyroflowPlugin {
                 let time = in_args.get_time()?;
                 let instance_data: &mut InstanceData = effect.get_instance_data()?;
 
-                instance_data.check_pending_file_info()?;
+                let loading_pending_video_file = instance_data.check_pending_file_info()?;
 
                 let output_image = instance_data.output_clip.get_image_mut(time)?;
                 let output_image = output_image.borrow_mut();
 
                 let output_rect: RectI = output_image.get_region_of_definition()?;
 
-                let stab = instance_data.gyrodata(output_image.get_pixel_depth()?, output_rect)?;
+                let stab = instance_data.gyrodata(output_image.get_pixel_depth()?, output_rect, loading_pending_video_file)?;
 
                 let params = stab.params.read();
                 let fps = params.fps;
                 let src_fps = instance_data.source_clip.get_frame_rate().unwrap_or(fps);
                 let org_ratio = params.video_size.0 as f64 / params.video_size.1 as f64;
-                let (has_quats, has_offsets) = {
+                let (has_accurate_timestamps, has_offsets) = {
                     let gyro = stab.gyro.read();
-                    (!gyro.org_quaternions.is_empty(), !gyro.get_offsets().is_empty())
+                    (gyro.has_accurate_timestamps, !gyro.get_offsets().is_empty())
                 };
 
                 let frame_number = (params.frame_count - 1) as f64;
@@ -452,7 +510,7 @@ impl Execute for GyroflowPlugin {
                     if instance_data.param_status.get_value()? {
                         instance_data.param_status.set_value(false)?;
                     }
-                } else if !has_quats && !has_offsets {
+                } else if !has_accurate_timestamps && !has_offsets {
                     instance_data.param_status.set_label("Not synced. Open in Gyroflow")?;
                     instance_data.param_status.set_hint("Gyro data is not synced with the video, open the video in Gyroflow and add sync points (eg. by doing autosync)")?;
                     if instance_data.param_status.get_value()? {
@@ -512,6 +570,8 @@ impl Execute for GyroflowPlugin {
                     ));
                 }
 
+                let input_rotation = instance_data.param_input_rotation.get_value_at_time(time).ok().map(|x| x as f32);
+
                 // log::debug!("src_size: {src_size:?} | src_rect: {src_rect:?}");
                 // log::debug!("out_size: {out_size:?} | out_rect: {out_rect:?}");
 
@@ -524,12 +584,14 @@ impl Execute for GyroflowPlugin {
                                 size: src_size,
                                 rect: Some(src_rect),
                                 data: BufferSource::OpenCL { texture: source_image.get_data()? as *mut c_void, queue },
+                                rotation: input_rotation,
                                 texture_copy: false
                             },
                             output: BufferDescription {
                                 size: out_size,
                                 rect: out_rect,
                                 data: BufferSource::OpenCL { texture: output_image.get_data()? as *mut c_void, queue },
+                                rotation: None,
                                 texture_copy: false
                             }
                         })
@@ -547,12 +609,14 @@ impl Execute for GyroflowPlugin {
                                     size: src_size,
                                     rect: Some(src_rect),
                                     data: BufferSource::MetalBuffer { buffer: in_ptr, command_queue },
+                                    rotation: input_rotation,
                                     texture_copy: false
                                 },
                                 output: BufferDescription {
                                     size: out_size,
                                     rect: out_rect,
                                     data: BufferSource::MetalBuffer { buffer: out_ptr, command_queue },
+                                    rotation: None,
                                     texture_copy: false
                                 }
                             })
@@ -570,12 +634,14 @@ impl Execute for GyroflowPlugin {
                                     size: src_size,
                                     rect: Some(src_rect),
                                     data: BufferSource::CUDABuffer { buffer: in_ptr },
+                                    rotation: input_rotation,
                                     texture_copy: true
                                 },
                                 output: BufferDescription {
                                     size: out_size,
                                     rect: out_rect,
                                     data: BufferSource::CUDABuffer { buffer: out_ptr },
+                                    rotation: None,
                                     texture_copy: true
                                 }
                             })
@@ -598,12 +664,14 @@ impl Execute for GyroflowPlugin {
                                 size: src_size,
                                 rect: Some(src_rect),
                                 data: BufferSource::Cpu { buffer: src_buf },
+                                rotation: input_rotation,
                                 texture_copy: false
                             },
                             output: BufferDescription {
                                 size: out_size,
                                 rect: out_rect,
                                 data: BufferSource::Cpu { buffer: dst_buf },
+                                rotation: None,
                                 texture_copy: false
                             }
                         })
@@ -640,6 +708,8 @@ impl Execute for GyroflowPlugin {
                     output_clip,
                     param_instance_id:              param_set.parameter("InstanceId")?,
                     param_project_data:             param_set.parameter("ProjectData")?,
+                    param_embedded_lens:            param_set.parameter("EmbeddedLensProfile")?,
+                    param_embedded_preset:          param_set.parameter("EmbeddedPreset")?,
                     param_project_path:             param_set.parameter("gyrodata")?,
                     param_disable_stretch:          param_set.parameter("DisableStretch")?,
                     param_status:                   param_set.parameter("Status")?,
@@ -648,6 +718,7 @@ impl Execute for GyroflowPlugin {
                     param_toggle_overview:          param_set.parameter("ToggleOverview")?,
                     param_dont_draw_outside:        param_set.parameter("DontDrawOutside")?,
                     param_include_project_data:     param_set.parameter("IncludeProjectData")?,
+                    param_input_rotation:           param_set.parameter("InputRotation")?,
                     gyrodata:                       LruCache::new(std::num::NonZeroUsize::new(20).unwrap()),
                     original_output_size:           (0, 0),
                     original_video_size:            (0, 0),
@@ -697,27 +768,25 @@ impl Execute for GyroflowPlugin {
                         instance_data.param_project_path.set_value(d.display().to_string())?;
                     }
                 }
-                if in_args.get_name()? == "OpenGyroflow" {
-                    if let Some(v) = gyroflow_core::util::get_setting("exeLocation") {
-                        if !v.is_empty() {
-                            let project = effect.get_instance_data::<InstanceData>()?.param_project_path.get_value()?;
-                            if !project.is_empty() {
-                                if cfg!(target_os = "macos") {
-                                    let _ = std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn();
+                if in_args.get_name()? == "LoadLens" {
+                    let instance_data: &mut InstanceData = effect.get_instance_data()?;
+                    let d = rfd::FileDialog::new().add_filter("Lens profiles and presets", &["json", "gyroflow"]);
+                    if let Some(d) = d.pick_file() {
+                        let d = d.display().to_string();
+                        if !d.is_empty() {
+                            if let Ok(contents) = std::fs::read_to_string(&d) {
+                                if d.ends_with(".json") {
+                                    instance_data.param_embedded_lens.set_value(contents)?;
                                 } else {
-                                    let _ = std::process::Command::new(v).args(["--open", &project]).spawn();
-                                }
-                            } else {
-                                if cfg!(target_os = "macos") {
-                                    let _ = std::process::Command::new("open").args(["-a", &v]).spawn();
-                                } else {
-                                    let _ = std::process::Command::new(v).spawn();
+                                    instance_data.param_embedded_preset.set_value(contents)?;
                                 }
                             }
+                            instance_data.clear_stab();
                         }
-                    } else {
-                        rfd::MessageDialog::new().set_description("Unable to find Gyroflow app path. Make sure to run Gyroflow app at least once and that version is at least v1.4.3").show();
                     }
+                }
+                if in_args.get_name()? == "OpenGyroflow" {
+                    effect.get_instance_data::<InstanceData>()?.open_gyroflow();
                 }
                 if in_args.get_name()? == "OpenRecentProject" {
                     if let Some(v) = gyroflow_core::util::get_setting("lastProject") {
@@ -771,7 +840,7 @@ impl Execute for GyroflowPlugin {
                     match in_args.get_name()?.as_ref() {
                         "FOV" | "Smoothness" | "LensCorrectionStrength" |
                         "HorizonLockAmount" | "HorizonLockRoll" |
-                        "PositionX" | "PositionY" | "Rotation" | "VideoSpeed" |
+                        "PositionX" | "PositionY" | "Rotation" | "InputRotation" | "VideoSpeed" |
                         "UseGyroflowsKeyframes" | "RecalculateKeyframes" => {
                             let instance_data: &mut InstanceData = effect.get_instance_data()?;
                             instance_data.param_status.set_label("Calculating...")?;
@@ -853,9 +922,11 @@ impl Execute for GyroflowPlugin {
                     param_set.param_define_string("InstanceId")?
                              .set_secret(true)?;
 
-                    let mut param = param_set.param_define_string("ProjectData")?;
-                    let _ = param.set_script_name("ProjectData");
-                    param.set_secret(true)?;
+                    for x in ["ProjectData", "EmbeddedLensProfile", "EmbeddedPreset"] {
+                        let mut param = param_set.param_define_string(x)?;
+                        let _ = param.set_script_name(x);
+                        param.set_secret(true)?;
+                    }
 
                     if CurrentFileInfo::is_available() {
                         let mut param = param_set.param_define_button("LoadCurrent")?;
@@ -874,6 +945,11 @@ impl Execute for GyroflowPlugin {
                     let mut param = param_set.param_define_button("Browse")?;
                     param.set_label("Browse")?;
                     param.set_hint("Browse for the Gyroflow project file")?;
+                    param.set_parent("ProjectGroup")?;
+
+                    let mut param = param_set.param_define_button("LoadLens")?;
+                    param.set_label("Load preset/lens profile")?;
+                    param.set_hint("Browse for the lens profile or a preset")?;
                     param.set_parent("ProjectGroup")?;
 
                     let mut param = param_set.param_define_button("OpenGyroflow")?;
@@ -962,6 +1038,14 @@ impl Execute for GyroflowPlugin {
                     param.set_display_max(100.0)?;
                     param.set_label("Position offset Y")?;
                     let _ = param.set_script_name("PositionY");
+                    param.set_parent("AdjustGroup")?;
+
+                    let mut param = param_set.param_define_double("InputRotation")?;
+                    param.set_default(0.0)?;
+                    param.set_display_min(-360.0)?;
+                    param.set_display_max(360.0)?;
+                    param.set_label("Input rotation")?;
+                    let _ = param.set_script_name("InputRotation");
                     param.set_parent("AdjustGroup")?;
 
                     let mut param = param_set.param_define_double("Rotation")?;
