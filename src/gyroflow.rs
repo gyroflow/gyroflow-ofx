@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
-use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager } };
+use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager }, telemetry_parser::util::VideoMetadata };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use ofx::*;
@@ -182,7 +182,21 @@ impl InstanceData {
 
             if !path.ends_with(".gyroflow") {
                 // Try to load from video file
-                match stab.load_video_file(&path, None) {
+                let mut metadata = None;
+                if path.to_ascii_lowercase().ends_with(".mxf") {
+                    let lock = self.current_file_info.lock();
+                    if let Some(ref current_file) = *lock {
+                        metadata = Some(VideoMetadata {
+                            duration_s: current_file.duration_s,
+                            fps: current_file.fps,
+                            width: current_file.width,
+                            height: current_file.height,
+                            rotation: 0
+                        });
+                    }
+                }
+
+                match stab.load_video_file(&path, metadata) {
                     Ok(md) => {
                         if self.param_include_project_data.get_value()? {
                             if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
@@ -213,7 +227,7 @@ impl InstanceData {
                                 }
                             }
                         }
-                        if !stab.gyro.read().has_accurate_timestamps && loading_pending_video_file {
+                        if !stab.gyro.read().file_metadata.has_accurate_timestamps && loading_pending_video_file {
                             self.open_gyroflow();
                         }
                     },
@@ -491,7 +505,7 @@ impl Execute for GyroflowPlugin {
                 let org_ratio = params.video_size.0 as f64 / params.video_size.1 as f64;
                 let (has_accurate_timestamps, has_offsets) = {
                     let gyro = stab.gyro.read();
-                    (gyro.has_accurate_timestamps, !gyro.get_offsets().is_empty())
+                    (gyro.file_metadata.has_accurate_timestamps, !gyro.get_offsets().is_empty())
                 };
 
                 let frame_number = (params.frame_count - 1) as f64;
@@ -677,22 +691,26 @@ impl Execute for GyroflowPlugin {
                         })
                     };
 
-                let processed = if let Some(ref mut buffers) = buffers {
-                    match output_image.get_pixel_depth()? {
+                if effect.abort()? { return FAILED; }
+
+                if let Some(ref mut buffers) = buffers {
+                    let processed = match output_image.get_pixel_depth()? {
                         BitDepth::Byte  => stab.process_pixels::<RGBA8> (timestamp_us, buffers),
                         BitDepth::Short => stab.process_pixels::<RGBA16>(timestamp_us, buffers),
                         BitDepth::Float => stab.process_pixels::<RGBAf> (timestamp_us, buffers)
+                    };
+                    match processed {
+                        Ok(_) => {
+                            // log::info!("Rendered | {}x{} in {:.2}ms: {:?}", src_size.0, src_size.1, _time.elapsed().as_micros() as f64 / 1000.0, _);
+                            OK
+                        },
+                        Err(e) => {
+                            log::warn!("Failed to render: {e:?}");
+                            FAILED
+                        }
                     }
                 } else {
-                    None
-                };
-
-                // log::info!("Rendered | {}x{} in {:.2}ms: {:?}", src_size.0, src_size.1, _time.elapsed().as_micros() as f64 / 1000.0, processed);
-
-                if effect.abort()? || !processed.is_some() {
                     FAILED
-                } else {
-                    OK
                 }
             }
 
