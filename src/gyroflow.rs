@@ -514,7 +514,7 @@ impl Execute for GyroflowPlugin {
                 if let Ok(range) = instance_data.source_clip.get_frame_range() {
                     if range.max > 0.0 {
                         if (frame_number - range.max).abs() > 2.0 {
-                            speed_stretch = frame_number / range.max;
+                            speed_stretch = ((frame_number / range.max) * 100.0).round() / 100.0;
                         }
                     }
                 }
