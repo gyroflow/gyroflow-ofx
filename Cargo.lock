@@ -1224,8 +1224,8 @@ dependencies = [
 
 [[package]]
 name = "gyroflow-core"
-version = "1.5.0"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=89d0832#89d0832d9243c759f563ae4f18e22d04d649c004"
+version = "1.5.1"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=c568f73#c568f73f3bd3259875eae8c37468a7e3e32fb2bb"
 dependencies = [
  "ahrs",
  "akaze",
