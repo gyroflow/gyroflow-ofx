@@ -370,9 +370,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.3.1"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6776fc96284a0bb647b615056fc496d1fe1644a7ab01829818a6d91cae888b84"
+checksum = "6dbe3c979c178231552ecba20214a8272df4e09f232a87aef4320cf06539aded"
 
 [[package]]
 name = "bitreader"
@@ -916,6 +916,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
+
+[[package]]
 name = "fc-blackbox"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -923,7 +929,7 @@ checksum = "6616d815efe117378f150e37c1374c650bf52b2380f0159fe3e654162927414e"
 dependencies = [
  "chrono",
  "integer-encoding",
- "itertools",
+ "itertools 0.10.5",
  "nom 6.1.2",
  "num-rational 0.4.1",
  "num-traits 0.2.15",
@@ -1002,7 +1008,7 @@ version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49a9d51ce47660b1e808d3c990b4709f2f415d928835a17dfd16991515c46bce"
 dependencies = [
- "fastrand",
+ "fastrand 1.9.0",
  "futures-core",
  "futures-io",
  "memchr",
@@ -1225,7 +1231,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.5.1"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=c568f73#c568f73f3bd3259875eae8c37468a7e3e32fb2bb"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=b973b4b#b973b4b63c4da1ba016b582a5dad0809e455204f"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1235,7 +1241,7 @@ dependencies = [
  "bincode",
  "biquad",
  "bitarray",
- "bitflags 2.3.1",
+ "bitflags 2.3.2",
  "bytemuck",
  "byteorder",
  "ciborium",
@@ -1248,14 +1254,14 @@ dependencies = [
  "eight-point",
  "enterpolation",
  "enum_delegate",
- "fastrand",
+ "fastrand 2.0.0",
  "flate2",
  "foreign-types",
  "futures-intrusive",
- "half 2.2.1",
+ "half 2.3.1",
  "image",
  "include_dir",
- "itertools",
+ "itertools 0.11.0",
  "lazy_static",
  "libc",
  "libloading 0.8.0",
@@ -1296,9 +1302,9 @@ dependencies = [
 name = "gyroflow-ofx"
 version = "1.0.10"
 dependencies = [
- "fastrand",
+ "fastrand 2.0.0",
  "gyroflow-core",
- "itertools",
+ "itertools 0.11.0",
  "lazy_static",
  "log",
  "log-panics",
@@ -1317,10 +1323,11 @@ checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "half"
-version = "2.2.1"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02b4af3693f1b705df946e9fe5631932443781d0aabb423b62fcd4d73f6d2fd0"
+checksum = "bc52e53916c08643f1b56ec082790d1e86a32e58dc5268f897f313fbae7b4872"
 dependencies = [
+ "cfg-if",
  "crunchy",
 ]
 
@@ -1514,6 +1521,15 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
 dependencies = [
  "either",
 ]
@@ -2115,7 +2131,7 @@ dependencies = [
 [[package]]
 name = "ofx"
 version = "0.3.0"
-source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=297af34#297af34ed28bac3d6e6a2ed8a83c8a6bc467a237"
+source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=d61c845#d61c845552d55f6e8b0fb579e96e40797d15ad27"
 dependencies = [
  "libc",
  "log",
@@ -2127,7 +2143,7 @@ dependencies = [
 [[package]]
 name = "ofx_sys"
 version = "0.2.0"
-source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=297af34#297af34ed28bac3d6e6a2ed8a83c8a6bc467a237"
+source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=d61c845#d61c845552d55f6e8b0fb579e96e40797d15ad27"
 dependencies = [
  "bindgen",
  "libc",
@@ -2352,7 +2368,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5d2d8d10f3c6ded6da8b05b5fb3b8a5082514344d56c9f871412d29b4e075b4"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -2859,7 +2875,7 @@ checksum = "fd1ba337640d60c3e96bc6f0638a939b9c9a7f2c316a1598c279828b3d1dc8c5"
 [[package]]
 name = "telemetry-parser"
 version = "0.2.8"
-source = "git+https://github.com/AdrianEddy/telemetry-parser.git?rev=1f8342a#1f8342a6267564435fac0dacf40a2bc46dccae3a"
+source = "git+https://github.com/AdrianEddy/telemetry-parser.git?rev=34a4a17#34a4a17e4c72572339f3e1a8bfe3009506ab87ec"
 dependencies = [
  "argh",
  "byteorder",
@@ -3198,7 +3214,7 @@ source = "git+https://github.com/AdrianEddy/wgpu.git?branch=buffer_from_raw#6ff2
 dependencies = [
  "arrayvec 0.7.2",
  "bit-vec",
- "bitflags 2.3.1",
+ "bitflags 2.3.2",
  "codespan-reporting",
  "log",
  "naga",
@@ -3222,7 +3238,7 @@ dependencies = [
  "arrayvec 0.7.2",
  "ash",
  "bit-set",
- "bitflags 2.3.1",
+ "bitflags 2.3.2",
  "block",
  "core-graphics-types",
  "d3d12",
@@ -3259,7 +3275,7 @@ name = "wgpu-types"
 version = "0.16.0"
 source = "git+https://github.com/AdrianEddy/wgpu.git?branch=buffer_from_raw#6ff21ec398c9b5cca7d96a12b463bd0dc726dae6"
 dependencies = [
- "bitflags 2.3.1",
+ "bitflags 2.3.2",
  "js-sys",
  "web-sys",
 ]
