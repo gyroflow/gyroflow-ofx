@@ -183,7 +183,7 @@ impl InstanceData {
             if !path.ends_with(".gyroflow") {
                 // Try to load from video file
                 let mut metadata = None;
-                if path.to_ascii_lowercase().ends_with(".mxf") {
+                if path.to_ascii_lowercase().ends_with(".mxf") || path.to_ascii_lowercase().ends_with(".braw") {
                     let lock = self.current_file_info.lock();
                     if let Some(ref current_file) = *lock {
                         metadata = Some(VideoMetadata {

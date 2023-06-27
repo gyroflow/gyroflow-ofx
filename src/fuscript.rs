@@ -49,7 +49,7 @@ impl CurrentFileInfo {
                 if stderr.trim().is_empty() && lines.len() == 6 {
                     let fps = lines[0].parse::<f64>().unwrap_or_default();
                     let frame_count = lines[1].parse::<usize>().unwrap_or_default();
-                    let duration_s = Self::parse_duration(lines[2]);
+                    let duration_s = Self::parse_duration(lines[2], fps);
                     let par = lines[3];
                     let resolution = lines[4].split("x").filter_map(|x| x.parse::<usize>().ok()).collect::<Vec<_>>();
                     let file_path = lines[5];
@@ -105,13 +105,13 @@ impl CurrentFileInfo {
         });
     }
 
-    fn parse_duration(v: &str) -> f64 {
+    fn parse_duration(v: &str, fps: f64) -> f64 {
         let parts = v.replace(";", ":").split(':').filter_map(|x| x.parse::<f64>().ok()).collect::<Vec<_>>();
         if parts.len() == 4 {
             parts[0] * 60.0 * 60.0 + // h
             parts[1] * 60.0 + // m
             parts[2] + // s
-            parts[3] / 60.0
+            parts[3] / fps.max(1.0)
         } else {
             0.0
         }
