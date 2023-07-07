@@ -227,9 +227,6 @@ impl InstanceData {
                             self.param_input_rotation.set_value(r)?;
                             stab.params.write().video_rotation = r;
                         }
-                        if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
-                            std::fs::write("E:\\myairbridge-4sz7ewpyyQh\\A007_11181629_C262-ofx.gyroflow", data).unwrap();
-                        }
                         if !stab.gyro.read().file_metadata.has_accurate_timestamps && loading_pending_video_file {
                             self.open_gyroflow();
                         }
