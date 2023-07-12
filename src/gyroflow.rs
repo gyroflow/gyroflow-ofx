@@ -791,7 +791,8 @@ impl Execute for GyroflowPlugin {
                     let lens_directory = || -> Option<std::path::PathBuf> {
                         let exe = gyroflow_core::util::get_setting("exeLocation").filter(|x| !x.is_empty())?;
                         if cfg!(target_os = "macos") {
-                            let mut path = std::path::Path::new(&exe).parent()?.parent()?.to_path_buf();
+                            let mut path = std::path::Path::new(&exe).to_path_buf();
+                            path.push("Contents");
                             path.push("Resources");
                             path.push("camera_presets");
                             Some(path.into())
