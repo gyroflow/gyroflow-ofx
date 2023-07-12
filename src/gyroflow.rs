@@ -788,7 +788,25 @@ impl Execute for GyroflowPlugin {
                 }
                 if in_args.get_name()? == "LoadLens" {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
-                    let d = rfd::FileDialog::new().add_filter("Lens profiles and presets", &["json", "gyroflow"]);
+                    let lens_directory = || -> Option<std::path::PathBuf> {
+                        let exe = gyroflow_core::util::get_setting("exeLocation").filter(|x| !x.is_empty())?;
+                        if cfg!(target_os = "macos") {
+                            let mut path = std::path::Path::new(&exe).parent()?.parent()?.to_path_buf();
+                            path.push("Resources");
+                            path.push("camera_presets");
+                            Some(path.into())
+                        } else {
+                            let mut path = std::path::Path::new(&exe).parent()?.to_path_buf();
+                            path.push("camera_presets");
+                            Some(path.into())
+                        }
+                    }();
+                    log::info!("lens directory: {lens_directory:?}");
+
+                    let mut d = rfd::FileDialog::new().add_filter("Lens profiles and presets", &["json", "gyroflow"]);
+                    if let Some(dir) = lens_directory {
+                        d = d.set_directory(dir);
+                    }
                     if let Some(d) = d.pick_file() {
                         let d = d.display().to_string();
                         if !d.is_empty() {
