@@ -182,21 +182,21 @@ impl InstanceData {
 
             if !path.ends_with(".gyroflow") {
                 // Try to load from video file
-                let mut metadata = None;
-                if path.to_ascii_lowercase().ends_with(".mxf") || path.to_ascii_lowercase().ends_with(".braw") {
-                    let lock = self.current_file_info.lock();
-                    if let Some(ref current_file) = *lock {
-                        metadata = Some(VideoMetadata {
-                            duration_s: current_file.duration_s,
-                            fps: current_file.fps,
-                            width: current_file.width,
-                            height: current_file.height,
-                            rotation: 0
-                        });
-                    }
-                }
+                // let mut metadata = None;
+                // if path.to_ascii_lowercase().ends_with(".mxf") || path.to_ascii_lowercase().ends_with(".braw") {
+                //     let lock = self.current_file_info.lock();
+                //     if let Some(ref current_file) = *lock {
+                //         metadata = Some(VideoMetadata {
+                //             duration_s: current_file.duration_s,
+                //             fps: current_file.fps,
+                //             width: current_file.width,
+                //             height: current_file.height,
+                //             rotation: 0
+                //         });
+                //     }
+                // }
 
-                match stab.load_video_file(&path, metadata) {
+                match stab.load_video_file(&path, None) {
                     Ok(md) => {
                         if let Ok(d) = self.param_embedded_lens.get_value() {
                             if !d.is_empty() {
@@ -336,22 +336,7 @@ impl InstanceData {
             self.update_loaded_state(loaded);
 
             if disable_stretch {
-                let (x_stretch, y_stretch) = {
-                    let lens = stab.lens.read();
-                    (lens.input_horizontal_stretch, lens.input_vertical_stretch)
-                };
-                if (x_stretch > 0.01 && x_stretch != 1.0) || (y_stretch > 0.01 && y_stretch != 1.0) {
-                    {
-                        let mut params = stab.params.write();
-                        params.video_size.0 = (params.video_size.0 as f64 * x_stretch).round() as usize;
-                        params.video_size.1 = (params.video_size.1 as f64 * y_stretch).round() as usize;
-                    }
-                    {
-                        let mut lens = stab.lens.write();
-                        lens.input_horizontal_stretch = 1.0;
-                        lens.input_vertical_stretch = 1.0;
-                    }
-                }
+                stab.disable_lens_stretch();
             }
 
             stab.set_fov_overview(self.param_toggle_overview.get_value()?);

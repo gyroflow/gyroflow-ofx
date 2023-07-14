@@ -15,8 +15,8 @@ path = "src/lib.rs"
 ofx = "0.3"
 log = "0.4"
 itertools = "0.11"
-lru = "0.10"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "af4c575", features = ["bundle-lens-profiles"] }
+lru = "0.11"
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "34d72f2", features = ["bundle-lens-profiles"] }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false, features = ["bundle-lens-profiles"] }
 log-panics = "2.1"
 rfd = "0.11"

@@ -82,6 +82,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
+
+[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1263,7 +1269,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.5.2"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=af4c575#af4c57581787ae82ec74c12a44a802909429c025"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=34d72f2#34d72f2e5dde8a28b017d0904a4a4749787916e2"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1298,7 +1304,7 @@ dependencies = [
  "libloading 0.8.0",
  "line_drawing",
  "log",
- "lru",
+ "lru 0.10.1",
  "metal",
  "mimalloc",
  "naga",
@@ -1341,7 +1347,7 @@ dependencies = [
  "lazy_static",
  "log",
  "log-panics",
- "lru",
+ "lru 0.11.0",
  "metal",
  "ofx",
  "parking_lot",
@@ -1393,6 +1399,10 @@ name = "hashbrown"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
+dependencies = [
+ "ahash 0.8.3",
+ "allocator-api2",
+]
 
 [[package]]
 name = "hassle-rs"
@@ -1735,6 +1745,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "718e8fae447df0c7e1ba7f5189829e63fd536945c8988d61444c19039f16b670"
 dependencies = [
  "hashbrown 0.13.2",
+]
+
+[[package]]
+name = "lru"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eedb2bdbad7e0634f83989bf596f497b070130daaa398ab22d84c39e266deec5"
+dependencies = [
+ "hashbrown 0.14.0",
 ]
 
 [[package]]
@@ -2890,7 +2909,7 @@ checksum = "5cce2183deb9e7ada727867823fb8bbbc8b56e503801a332d155dde613130e1b"
 [[package]]
 name = "stabilize_spirv"
 version = "0.0.0"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=af4c575#af4c57581787ae82ec74c12a44a802909429c025"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=34d72f2#34d72f2e5dde8a28b017d0904a4a4749787916e2"
 dependencies = [
  "spirv-std",
 ]
@@ -3090,9 +3109,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.19.13"
+version = "0.19.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f8751d9c1b03c6500c387e96f81f815a4f8e72d142d2d4a9ffa6fedd51ddee7"
+checksum = "f8123f27e969974a3dfba720fdb560be359f57b44302d280ba72e76a74480e8a"
 dependencies = [
  "indexmap 2.0.0",
  "serde",
