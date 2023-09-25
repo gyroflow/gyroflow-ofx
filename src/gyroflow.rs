@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
-use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager } };
+use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager }, filesystem };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use ofx::*;
@@ -196,7 +196,7 @@ impl InstanceData {
                 //     }
                 // }
 
-                match stab.load_video_file(&path, None) {
+                match stab.load_video_file(&filesystem::path_to_url(&path), None) {
                     Ok(md) => {
                         if let Ok(d) = self.param_embedded_lens.get_value() {
                             if !d.is_empty() {
@@ -218,7 +218,7 @@ impl InstanceData {
                             }
                         }
                         if self.param_include_project_data.get_value()? {
-                            if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
+                            if let Ok(data) = stab.export_gyroflow_data(gyroflow_core::GyroflowProjectType::WithGyroData, "{}", None) {
                                 self.param_project_data.set_value(data)?;
                             }
                         }
@@ -266,7 +266,7 @@ impl InstanceData {
                     }
                 };
                 let mut is_preset = false;
-                stab.import_gyroflow_data(project_data.as_bytes(), true, Some(std::path::PathBuf::from(path)), |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
+                stab.import_gyroflow_data(project_data.as_bytes(), true, Some(&filesystem::path_to_url(&path)), |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
                     log::error!("load_gyro_data error: {}", &e);
                     self.update_loaded_state(false);
                     Error::UnknownError
@@ -835,7 +835,7 @@ impl Execute for GyroflowPlugin {
                                     instance_data.param_project_data.set_value(data.clone())?;
                                 } else {
                                     if let Some((_, stab)) = instance_data.gyrodata.peek_lru() {
-                                        if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
+                                        if let Ok(data) = stab.export_gyroflow_data(gyroflow_core::GyroflowProjectType::WithGyroData, "{}", None) {
                                             instance_data.param_project_data.set_value(data)?;
                                         }
                                     }
@@ -845,7 +845,7 @@ impl Execute for GyroflowPlugin {
                             }
                         } else {
                             if let Some((_, stab)) = instance_data.gyrodata.peek_lru() {
-                                if let Ok(data) = stab.export_gyroflow_data(false, false, "{}") {
+                                if let Ok(data) = stab.export_gyroflow_data(gyroflow_core::GyroflowProjectType::WithGyroData, "{}", None) {
                                     instance_data.param_project_data.set_value(data)?;
                                 }
                             }
@@ -1175,6 +1175,8 @@ impl Execute for GyroflowPlugin {
                 if _has_metal { let _ = effect_properties.set_metal_render_supported("true"); }
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 if _has_vulkan || _has_dx12 { let _ = effect_properties.set_cuda_render_supported("true"); }
+
+                let _ = effect_properties.set_opengl_render_supported("false");
 
                 OK
             }
