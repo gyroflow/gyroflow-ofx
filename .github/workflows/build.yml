@@ -20,7 +20,7 @@ jobs:
             source \$HOME/.cargo/env
             git clone --depth 1 https://github.com/Microsoft/vcpkg.git ${{ github.workspace }}/vcpkg || true
             ${{ github.workspace }}/vcpkg/bootstrap-vcpkg.sh -disableMetrics
-            vcpkg install "opencl:x64-linux-release"
+            ${{ github.workspace }}/vcpkg/vcpkg install "opencl:x64-linux-release"
             cd ${{ github.workspace }}
             cargo build --release
             make target/gyroflow-ofx-linux.zip
