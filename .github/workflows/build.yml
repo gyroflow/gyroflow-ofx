@@ -9,25 +9,22 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - run: sudo apt-get update -y
-      - run: sudo apt-get install -y ocl-icd-opencl-dev libgtk-3-dev
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: lukka/get-cmake@latest
-      - uses: lukka/run-vcpkg@v10
-        with:
-          vcpkgGitCommitId: ac12118f02e127ef1fe9806ffe1a23e7db7ef988
-      - name: Install OpenCL
-        run: vcpkg install "opencl:x64-linux-release"
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
-      - run: make target/gyroflow-ofx-linux.zip
+      - run: |
+          sudo docker run -v ${{ github.workspace }}:${{ github.workspace }} -v $HOME/.cargo:/root/.cargo debian:10 bash -c "
+            set -e
+            apt-get update -y
+            echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+            apt install -y sudo dialog apt-utils git ocl-icd-opencl-dev libgtk-3-dev
+            export RUNLEVEL=1
+            curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
+            source \$HOME/.cargo/env
+            git clone --depth 1 https://github.com/Microsoft/vcpkg.git ${{ github.workspace }}/vcpkg || true
+            ${{ github.workspace }}/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+            vcpkg install "opencl:x64-linux-release"
+            cd ${{ github.workspace }}
+            cargo build --release
+            make target/gyroflow-ofx-linux.zip
+          "
 
       - name: Save Binaries
         uses: actions/upload-artifact@v3
