@@ -74,7 +74,7 @@ jobs:
       - name: Install Mac certificate
         uses: apple-actions/import-codesign-certs@v1
         with:
-          p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
+          p12-file-base64: ${{ secrets.MACOS_CERTIFICATES }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
       - run: make target/gyroflow-ofx-macosx.dmg
