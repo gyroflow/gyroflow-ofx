@@ -25,7 +25,8 @@ lazy_static::lazy_static! {
 
 #[derive(Default)]
 struct GyroflowPlugin {
-	host_supports_multiple_clip_depths: Bool
+	host_supports_multiple_clip_depths: Bool,
+    context_initialized: bool,
 }
 
 struct KeyframableParams {
@@ -567,7 +568,7 @@ impl Execute for GyroflowPlugin {
                     None
                 };
                 let out_scale = output_image.get_render_scale()?;
-                if out_scale.x != 1.0 || out_scale.y != 1.0 {
+                if (out_scale.x != 1.0 || out_scale.y != 1.0) && !in_args.get_opengl_enabled().unwrap_or_default() {
                     // log::debug!("out_scale: {:?}", out_scale);
                     let w = (out_size.0 as f64 * out_scale.x as f64).round() as usize;
                     let h = (out_size.1 as f64 * out_scale.y as f64).round() as usize;
@@ -658,20 +659,26 @@ impl Execute for GyroflowPlugin {
                     } else if in_args.get_opengl_enabled().unwrap_or_default() {
                         let texture = source_image.get_opengl_texture_index()? as u32;
                         let out_texture = output_image.get_opengl_texture_index()? as u32;
+                        let mut src_size = src_size;
+                        let mut out_size = out_size;
+                        src_size.2 = src_size.0 * 4 * match source_image.get_pixel_depth()? { BitDepth::Byte => 1, BitDepth::Short => 2, BitDepth::Float => 4 };
+                        out_size.2 = out_size.0 * 4 * match output_image.get_pixel_depth()? { BitDepth::Byte => 1, BitDepth::Short => 2, BitDepth::Float => 4 };
+
+                        // log::info!("OpenGL in: {texture}, out: {out_texture} src_size: {src_size:?}, out_size: {out_size:?}, in_rect: {src_rect:?}, out_rect: {out_rect:?}");
                         Some(Buffers {
                             input: BufferDescription {
                                 size: src_size,
                                 rect: Some(src_rect),
                                 data: BufferSource::OpenGL { texture: texture, context: std::ptr::null_mut() },
                                 rotation: input_rotation,
-                                texture_copy: false
+                                texture_copy: true
                             },
                             output: BufferDescription {
                                 size: out_size,
                                 rect: out_rect,
                                 data: BufferSource::OpenGL { texture: out_texture, context: std::ptr::null_mut() },
                                 rotation: None,
-                                texture_copy: false
+                                texture_copy: true
                             }
                         })
                     } else {
@@ -1182,7 +1189,10 @@ impl Execute for GyroflowPlugin {
 
             OpenGLContextAttached(ref mut _effect) => {
                 log::info!("OpenGLContextAttached");
-                gyroflow_core::gpu::initialize_contexts();
+				if !self.context_initialized {
+                    gyroflow_core::gpu::initialize_contexts();
+                    self.context_initialized = true;
+                }
                 OK
             },
             OpenGLContextDetached(ref mut _effect) => {
