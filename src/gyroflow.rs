@@ -24,7 +24,9 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Default)]
-struct GyroflowPlugin { }
+struct GyroflowPlugin {
+	host_supports_multiple_clip_depths: Bool
+}
 
 struct KeyframableParams {
     fov: ParamHandle<Double>,
@@ -477,7 +479,11 @@ impl Execute for GyroflowPlugin {
 
                 let loading_pending_video_file = instance_data.check_pending_file_info()?;
 
-                let output_image = instance_data.output_clip.get_image_mut(time)?;
+                let output_image = if in_args.get_opengl_enabled().unwrap_or_default() {
+                    instance_data.output_clip.load_texture_mut(time, None)?
+                } else {
+                    instance_data.output_clip.get_image_mut(time)?
+                };
                 let output_image = output_image.borrow_mut();
 
                 let output_rect: RectI = output_image.get_region_of_definition()?;
@@ -536,7 +542,11 @@ impl Execute for GyroflowPlugin {
                     timestamp_us = ((time / src_fps * 1_000_000.0) * speed_stretch).round() as i64;
                 }
 
-                let source_image = instance_data.source_clip.get_image(time)?;
+                let source_image = if in_args.get_opengl_enabled().unwrap_or_default() {
+                    instance_data.source_clip.load_texture(time, None)?
+                } else {
+                    instance_data.source_clip.get_image(time)?
+                };
 
                 let source_rect: RectI = source_image.get_region_of_definition()?;
 
@@ -645,6 +655,25 @@ impl Execute for GyroflowPlugin {
                                 }
                             })
                         }
+                    } else if in_args.get_opengl_enabled().unwrap_or_default() {
+                        let texture = source_image.get_opengl_texture_index()? as u32;
+                        let out_texture = output_image.get_opengl_texture_index()? as u32;
+                        Some(Buffers {
+                            input: BufferDescription {
+                                size: src_size,
+                                rect: Some(src_rect),
+                                data: BufferSource::OpenGL { texture: texture, context: std::ptr::null_mut() },
+                                rotation: input_rotation,
+                                texture_copy: false
+                            },
+                            output: BufferDescription {
+                                size: out_size,
+                                rect: out_rect,
+                                data: BufferSource::OpenGL { texture: out_texture, context: std::ptr::null_mut() },
+                                rotation: None,
+                                texture_copy: false
+                            }
+                        })
                     } else {
                         use std::slice::from_raw_parts_mut;
                         let src_buf = unsafe { match source_image.get_pixel_depth()? {
@@ -1135,12 +1164,44 @@ impl Execute for GyroflowPlugin {
                 OK
             }
 
+            /*GetClipPreferences(ref mut effect, ref mut out_args) => {
+				let instance_data: &mut InstanceData = effect.get_instance_data()?;
+				let bit_depth = instance_data.source_clip.get_pixel_depth()?;
+				let image_component = instance_data.source_clip.get_components()?;
+				let output_component = match image_component {
+					ImageComponent::RGBA | ImageComponent::RGB => ImageComponent::RGBA,
+					_ => ImageComponent::Alpha,
+				};
+				out_args.set_raw(image_clip_prop_components!(clip_output!()), output_component.to_bytes())?;
+
+				if self.host_supports_multiple_clip_depths {
+					out_args.set_raw(image_clip_prop_depth!(clip_output!()), bit_depth.to_bytes())?;
+				}
+				OK
+			}*/
+
+            OpenGLContextAttached(ref mut _effect) => {
+                log::info!("OpenGLContextAttached");
+                gyroflow_core::gpu::initialize_contexts();
+                OK
+            },
+            OpenGLContextDetached(ref mut _effect) => {
+                log::info!("OpenGLContextDetached");
+                OK
+            },
             Describe(ref mut effect) => {
-                log::info!("Host supports OpenGL: {:?}", _plugin_context.get_host().get_opengl_render_supported());
-                log::info!("Host supports OpenCL: {:?}", _plugin_context.get_host().get_opencl_render_supported());
-                log::info!("Host supports CUDA: {:?}", _plugin_context.get_host().get_cuda_render_supported());
-                log::info!("Host supports Metal: {:?}", _plugin_context.get_host().get_metal_render_supported());
-                if _plugin_context.get_host().get_opencl_render_supported().unwrap_or_default() != "true" {
+				self.host_supports_multiple_clip_depths = _plugin_context.get_host().get_supports_multiple_clip_depths()?;
+
+                let supports_opencl = _plugin_context.get_host().get_opencl_render_supported().unwrap_or_default() == "true";
+                let supports_opengl = _plugin_context.get_host().get_opengl_render_supported().unwrap_or_default() == "true";
+                let supports_cuda   = _plugin_context.get_host().get_cuda_render_supported().unwrap_or_default() == "true";
+                let supports_metal  = _plugin_context.get_host().get_metal_render_supported().unwrap_or_default() == "true";
+
+                log::info!("Host supports OpenGL: {:?}", supports_opengl);
+                log::info!("Host supports OpenCL: {:?}", supports_opencl);
+                log::info!("Host supports CUDA: {:?}", supports_cuda);
+                log::info!("Host supports Metal: {:?}", supports_metal);
+                if !supports_opencl && !supports_opengl {
                     std::env::set_var("NO_OPENCL", "1");
                 }
 
@@ -1161,10 +1222,17 @@ impl Execute for GyroflowPlugin {
                 effect_properties.set_supports_multi_resolution(true)?;
                 effect_properties.set_temporal_clip_access(true)?;
 
+                if supports_opengl && !supports_opencl && !supports_cuda && !supports_metal {
+                    // We'll initialize the devices in OpenGLContextAttached
+                    let _ = effect_properties.set_opengl_render_supported("true");
+                    return OK;
+                }
+
                 let opencl_devices = gyroflow_core::gpu::opencl::OclWrapper::list_devices();
                 let wgpu_devices = gyroflow_core::gpu::wgpu::WgpuWrapper::list_devices();
                 if !opencl_devices.is_empty() {
                     let _ = effect_properties.set_opencl_render_supported("true");
+                    let _ = effect_properties.set_opengl_render_supported("true");
                 }
 
                 let _has_metal  = wgpu_devices.iter().any(|x| x.contains("(Metal)"));
@@ -1175,8 +1243,6 @@ impl Execute for GyroflowPlugin {
                 if _has_metal { let _ = effect_properties.set_metal_render_supported("true"); }
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 if _has_vulkan || _has_dx12 { let _ = effect_properties.set_cuda_render_supported("true"); }
-
-                let _ = effect_properties.set_opengl_render_supported("false");
 
                 OK
             }
