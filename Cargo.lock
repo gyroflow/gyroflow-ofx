@@ -2301,7 +2301,7 @@ dependencies = [
 [[package]]
 name = "ofx"
 version = "0.3.0"
-source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=9c718fc#9c718fc13fbea5e30e17fdb42d339fa9c57bc6cb"
+source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=3370dc4#3370dc4e2ef67a344a799d1e93c823851ed30dd3"
 dependencies = [
  "libc",
  "log",
@@ -2313,7 +2313,7 @@ dependencies = [
 [[package]]
 name = "ofx_sys"
 version = "0.2.0"
-source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=9c718fc#9c718fc13fbea5e30e17fdb42d339fa9c57bc6cb"
+source = "git+https://github.com/AdrianEddy/ofx-rs.git?rev=3370dc4#3370dc4e2ef67a344a799d1e93c823851ed30dd3"
 dependencies = [
  "bindgen",
  "libc",

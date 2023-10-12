@@ -40,8 +40,8 @@ codegen-units = 1
 opt-level = 2
 
 [patch.crates-io]
-ofx = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "9c718fc" }
-ofx_sys = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "9c718fc" }
+ofx = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "3370dc4" }
+ofx_sys = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "3370dc4" }
 #ofx = { path = "../ofx-rs/ofx" }
 #ofx_sys = { path = "../ofx-rs/ofx-sys" }
 metal = { git = "https://github.com/gfx-rs/metal-rs/", rev = "d24f1a4" }

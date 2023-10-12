@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
-use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf }, keyframes::{ KeyframeType, KeyframeManager }, filesystem };
+use gyroflow_core::{ StabilizationManager, stabilization::{ RGBA8, RGBA16, RGBAf, RGBAf16 }, keyframes::{ KeyframeType, KeyframeManager }, filesystem };
 use gyroflow_core::gpu::{ BufferDescription, Buffers, BufferSource };
 use lru::LruCache;
 use ofx::*;
@@ -661,8 +661,8 @@ impl Execute for GyroflowPlugin {
                         let out_texture = output_image.get_opengl_texture_index()? as u32;
                         let mut src_size = src_size;
                         let mut out_size = out_size;
-                        src_size.2 = src_size.0 * 4 * match source_image.get_pixel_depth()? { BitDepth::Byte => 1, BitDepth::Short => 2, BitDepth::Float => 4 };
-                        out_size.2 = out_size.0 * 4 * match output_image.get_pixel_depth()? { BitDepth::Byte => 1, BitDepth::Short => 2, BitDepth::Float => 4 };
+                        src_size.2 = src_size.0 * 4 * match source_image.get_pixel_depth()? { BitDepth::None => 0, BitDepth::Byte => 1, BitDepth::Short => 2, BitDepth::Half => 2, BitDepth::Float => 4 };
+                        out_size.2 = out_size.0 * 4 * match output_image.get_pixel_depth()? { BitDepth::None => 0, BitDepth::Byte => 1, BitDepth::Short => 2, BitDepth::Half => 2, BitDepth::Float => 4 };
 
                         // log::info!("OpenGL in: {texture}, out: {out_texture} src_size: {src_size:?}, out_size: {out_size:?}, in_rect: {src_rect:?}, out_rect: {out_rect:?}");
                         Some(Buffers {
@@ -684,13 +684,17 @@ impl Execute for GyroflowPlugin {
                     } else {
                         use std::slice::from_raw_parts_mut;
                         let src_buf = unsafe { match source_image.get_pixel_depth()? {
+                            BitDepth::None  => { return FAILED; }
                             BitDepth::Byte  => { let b = source_image.get_descriptor::<RGBAColourB>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
                             BitDepth::Short => { let b = source_image.get_descriptor::<RGBAColourS>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
+                            BitDepth::Half  => { let b = source_image.get_descriptor::<RGBAColourS>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
                             BitDepth::Float => { let b = source_image.get_descriptor::<RGBAColourF>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) }
                         } };
                         let dst_buf = unsafe { match output_image.get_pixel_depth()? {
+                            BitDepth::None  => { return FAILED; }
                             BitDepth::Byte  => { let b = output_image.get_descriptor::<RGBAColourB>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
                             BitDepth::Short => { let b = output_image.get_descriptor::<RGBAColourS>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
+                            BitDepth::Half  => { let b = output_image.get_descriptor::<RGBAColourS>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) },
                             BitDepth::Float => { let b = output_image.get_descriptor::<RGBAColourF>()?; let mut b = b.data(); from_raw_parts_mut(b.ptr_mut(0), b.bytes()) }
                         } };
 
@@ -716,9 +720,11 @@ impl Execute for GyroflowPlugin {
 
                 if let Some(ref mut buffers) = buffers {
                     let processed = match output_image.get_pixel_depth()? {
-                        BitDepth::Byte  => stab.process_pixels::<RGBA8> (timestamp_us, buffers),
-                        BitDepth::Short => stab.process_pixels::<RGBA16>(timestamp_us, buffers),
-                        BitDepth::Float => stab.process_pixels::<RGBAf> (timestamp_us, buffers)
+                        BitDepth::None  => { return FAILED; },
+                        BitDepth::Byte  => stab.process_pixels::<RGBA8>  (timestamp_us, buffers),
+                        BitDepth::Short => stab.process_pixels::<RGBA16> (timestamp_us, buffers),
+                        BitDepth::Half  => stab.process_pixels::<RGBAf16>(timestamp_us, buffers),
+                        BitDepth::Float => stab.process_pixels::<RGBAf>  (timestamp_us, buffers)
                     };
                     match processed {
                         Ok(_) => {
