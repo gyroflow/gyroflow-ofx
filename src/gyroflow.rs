@@ -140,6 +140,15 @@ impl InstanceData {
         let _ = self.param_open_in_gyroflow.set_label(if loaded { "Open in Gyroflow" } else { "Open Gyroflow" });
     }
 
+    fn set_keyframe_provider(&self, stab: &StabilizationManager) {
+        let kparams = self.keyframable_params.clone();
+        stab.keyframes.write().set_custom_provider(move |kf, typ, timestamp_ms| -> Option<f64> {
+            let params = kparams.read();
+            if params.use_gyroflows_cached && kf.is_keyframed_internally(typ) { return None; }
+            params.cached_keyframes.value_at_video_timestamp(typ, timestamp_ms)
+        });
+    }
+
     fn gyrodata(&mut self, bit_depth: BitDepth, output_rect: RectI, loading_pending_video_file: bool) -> Result<Arc<StabilizationManager>> {
         let disable_stretch = self.param_disable_stretch.get_value()?;
 
@@ -169,6 +178,7 @@ impl InstanceData {
             if !self.gyrodata.contains(&key) {
                 self.gyrodata.put(key.to_owned(), stab.clone());
             }
+            self.set_keyframe_provider(&stab);
             stab
         } else {
             let mut stab = StabilizationManager::default();
@@ -362,12 +372,7 @@ impl InstanceData {
                 stab.interpolation = gyroflow_core::stabilization::Interpolation::Lanczos4;
             }
 
-            let kparams = self.keyframable_params.clone();
-            stab.keyframes.write().set_custom_provider(move |kf, typ, timestamp_ms| -> Option<f64> {
-                let params = kparams.read();
-                if params.use_gyroflows_cached && kf.is_keyframed_internally(typ) { return None; }
-                params.cached_keyframes.value_at_video_timestamp(typ, timestamp_ms)
-            });
+            self.set_keyframe_provider(&stab);
 
             stab.invalidate_smoothing();
             stab.recompute_blocking();
@@ -527,6 +532,7 @@ impl Execute for GyroflowPlugin {
                     instance_data.param_status.set_hint("OK")?;
                     if !instance_data.param_status.get_value()? {
                         instance_data.param_status.set_value(true)?;
+                        instance_data.update_loaded_state(true);
                     }
                 }
 
