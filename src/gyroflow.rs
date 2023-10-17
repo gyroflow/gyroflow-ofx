@@ -112,7 +112,9 @@ struct InstanceData {
     ever_changed: bool,
 
     current_file_info_pending: Arc<AtomicBool>,
-    current_file_info: Arc<Mutex<Option<CurrentFileInfo>>>
+    current_file_info: Arc<Mutex<Option<CurrentFileInfo>>>,
+
+    opencl_disabled: bool,
 }
 impl Drop for InstanceData {
     fn drop(&mut self) {
@@ -467,6 +469,12 @@ impl InstanceData {
             rfd::MessageDialog::new().set_description("Unable to find Gyroflow app path. Make sure to run Gyroflow app at least once and that version is at least v1.4.3").show();
         }
     }
+    fn disable_opencl(&mut self) {
+        if !self.opencl_disabled {
+            std::env::set_var("NO_OPENCL", "1");
+            self.opencl_disabled = true;
+        }
+    }
 }
 
 struct PerFrameParams { }
@@ -616,6 +624,7 @@ impl Execute for GyroflowPlugin {
                         { None }
                         #[cfg(any(target_os = "macos", target_os = "ios"))]
                         {
+                            instance_data.disable_opencl();
                             let in_ptr  = source_image.get_data()? as *mut metal::MTLBuffer;
                             let out_ptr = output_image.get_data()? as *mut metal::MTLBuffer;
                             let command_queue = in_args.get_metal_command_queue()? as *mut metal::MTLCommandQueue;
@@ -642,6 +651,7 @@ impl Execute for GyroflowPlugin {
                         { None }
                         #[cfg(any(target_os = "windows", target_os = "linux"))]
                         {
+                            instance_data.disable_opencl();
                             let in_ptr  = source_image.get_data()? as *mut std::ffi::c_void;
                             let out_ptr = output_image.get_data()? as *mut std::ffi::c_void;
 
@@ -778,7 +788,8 @@ impl Execute for GyroflowPlugin {
                     current_file_info:              Arc::new(Mutex::new(None)),
                     current_file_info_pending:      Arc::new(AtomicBool::new(false)),
                     reload_values_from_project:     false,
-                    ever_changed: false,
+                    ever_changed:                   false,
+                    opencl_disabled:                false,
                     keyframable_params: Arc::new(RwLock::new(KeyframableParams {
                         fov:                      param_set.parameter("FOV")?,
                         smoothness:               param_set.parameter("Smoothness")?,

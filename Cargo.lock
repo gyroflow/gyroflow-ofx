@@ -1281,7 +1281,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.5.3"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=838f1d2#838f1d223d526e86ee7b2e69ce98d137d09b6150"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=3f411b2#3f411b28d60a8cdbf7018147c25fa43194632232"
 dependencies = [
  "ahrs",
  "akaze",
@@ -3129,7 +3129,7 @@ checksum = "5cce2183deb9e7ada727867823fb8bbbc8b56e503801a332d155dde613130e1b"
 [[package]]
 name = "stabilize_spirv"
 version = "0.0.0"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=838f1d2#838f1d223d526e86ee7b2e69ce98d137d09b6150"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=3f411b2#3f411b28d60a8cdbf7018147c25fa43194632232"
 dependencies = [
  "spirv-std",
 ]
