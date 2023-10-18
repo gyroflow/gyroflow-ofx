@@ -19,7 +19,7 @@ lru = "0.12"
 gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "c551b2f", features = ["bundle-lens-profiles"] }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false, features = ["bundle-lens-profiles"] }
 log-panics = "2.1"
-rfd = "0.12"
+rfd = { version = "0.12", default-features = false, features = ["xdg-portal"] }
 parking_lot = "0.12"
 lazy_static = "1.4.0"
 fastrand = "2.0.1"
@@ -40,8 +40,8 @@ codegen-units = 1
 opt-level = 2
 
 [patch.crates-io]
-ofx = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "3370dc4" }
-ofx_sys = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "3370dc4" }
+ofx = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "9f96aa7" }
+ofx_sys = { git = "https://github.com/AdrianEddy/ofx-rs.git", rev = "9f96aa7" }
 #ofx = { path = "../ofx-rs/ofx" }
 #ofx_sys = { path = "../ofx-rs/ofx-sys" }
 metal = { git = "https://github.com/gfx-rs/metal-rs/", rev = "d24f1a4" }
