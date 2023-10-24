@@ -56,7 +56,7 @@ jobs:
       - uses: lukka/get-cmake@latest
       - uses: lukka/run-vcpkg@v10
         with:
-          vcpkgGitCommitId: ac12118f02e127ef1fe9806ffe1a23e7db7ef988
+          vcpkgGitCommitId: 3265c187c74914aa5569b75355badebfdbab7987
       - name: Install OpenCL
         run: |
           vcpkg install "opencl:x64-osx-release"
@@ -115,7 +115,7 @@ jobs:
       - uses: lukka/get-cmake@latest
       - uses: lukka/run-vcpkg@v10
         with:
-          vcpkgGitCommitId: ac12118f02e127ef1fe9806ffe1a23e7db7ef988
+          vcpkgGitCommitId: 3265c187c74914aa5569b75355badebfdbab7987
       - name: Install OpenCL
         run: vcpkg install "opencl:x64-windows-release"
 

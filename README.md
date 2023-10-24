@@ -28,13 +28,13 @@ Then in Resolve, make sure to go to Preferences -> Video plugins and enable Gyro
 Copy the `Gyroflow.ofx.bundle` from the archive into the `C:\Program Files\Common Files\OFX\Plugins` folder.
 Create the folder if it doesn't exist yet.
 
-# Usage
+## For more detailed instructions, see the [docs](https://docs.gyroflow.xyz/app/video-editor-plugins/davinci-resolve-openfx#installation)
 
-## With Gyroflow 1.0
+# Usage
 
 ### Export `.gyroflow` file in the Gyroflow app
 
-Click the `Export .gyroflow file (including gyro data)` in the Gyroflow app.
+Click the `Export project file (including gyro data)` in the Gyroflow app. You can also use `Ctrl+S` or `Command+S` shortcut
 
 ### Basic plugin usage
 
@@ -44,11 +44,11 @@ You can also apply the plugin on the Edit or Color page - it should work faster 
 
 ### Load the .gyroflow file
 
-In DaVinci Resolve Fusion, go to the `Gyroflow` node settings. Select the `.gyroflow` file in the `Gyroflow file` entry.
+In DaVinci Resolve, go to the `Gyroflow` plugin settings. Select the `.gyroflow` file in the `Project file` entry.
+If your video file is from GoPro 8+, DJI or Insta360, you can also select video file directly. If it's from Sony or it's BRAW - you can also select the video file directly, but you need to load lens profile or preset after that.
 
-## With Gyroflow 0.x
+## For more detailed instructions, see the [docs](https://docs.gyroflow.xyz/app/video-editor-plugins/general-plugin-workflow)
 
-Please see an earlier version of this [README.md](https://github.com/gyroflow/gyroflow-ofx/blob/82d31797ae586daac16e0a8b3b492a16af606f6c/README.md#with-gyroflow-0x)
 
 # License
 

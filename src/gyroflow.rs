@@ -27,6 +27,7 @@ lazy_static::lazy_static! {
 struct GyroflowPlugin {
 	host_supports_multiple_clip_depths: Bool,
     context_initialized: bool,
+    log_initialized: bool
 }
 
 struct KeyframableParams {
@@ -1276,6 +1277,29 @@ impl Execute for GyroflowPlugin {
                 if _has_metal { let _ = effect_properties.set_metal_render_supported("true"); }
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 if _has_vulkan || _has_dx12 { let _ = effect_properties.set_cuda_render_supported("true"); }
+
+				if !self.log_initialized {
+                    let mut tmp_log = std::env::temp_dir();
+                    tmp_log.push("gyroflow-ofx.log");
+
+                    let log_path = if let Ok(path) = effect_properties.get_file_path() {
+                        std::path::Path::new(&path).with_extension("log")
+                    } else {
+                        tmp_log.clone()
+                    };
+                    let log_config = [ "mp4parse", "wgpu", "naga", "akaze", "ureq", "rustls", "ofx" ]
+                        .into_iter()
+                        .fold(simplelog::ConfigBuilder::new(), |mut cfg, x| { cfg.add_filter_ignore_str(x); cfg })
+                        .build();
+
+                    if let Ok(file_log) = std::fs::File::create(log_path) {
+                        let _ = simplelog::WriteLogger::init(log::LevelFilter::Debug, log_config, file_log);
+                        self.log_initialized = true;
+                    } else if let Ok(file_log) = std::fs::File::create(tmp_log) {
+                        let _ = simplelog::WriteLogger::init(log::LevelFilter::Debug, log_config, file_log);
+                        self.log_initialized = true;
+                    }
+                }
 
                 OK
             }
