@@ -1292,12 +1292,19 @@ impl Execute for GyroflowPlugin {
                         .fold(simplelog::ConfigBuilder::new(), |mut cfg, x| { cfg.add_filter_ignore_str(x); cfg })
                         .build();
 
-                    if let Ok(file_log) = std::fs::File::create(log_path) {
+                    if let Ok(file_log) = std::fs::File::create(&log_path) {
                         let _ = simplelog::WriteLogger::init(log::LevelFilter::Debug, log_config, file_log);
                         self.log_initialized = true;
-                    } else if let Ok(file_log) = std::fs::File::create(tmp_log) {
+                    } else if let Ok(file_log) = std::fs::File::create(&tmp_log) {
                         let _ = simplelog::WriteLogger::init(log::LevelFilter::Debug, log_config, file_log);
                         self.log_initialized = true;
+                    } else if cfg!(target_os = "linux") {
+                        if let Ok(file_log) = std::fs::File::create("/tmp/gyroflow-ofx.log") {
+                            let _ = simplelog::WriteLogger::init(log::LevelFilter::Debug, log_config, file_log);
+                            self.log_initialized = true;
+                        } else {
+                            eprintln!("Failed to create log file: {log_path:?}, {tmp_log:?}, /tmp/gyroflow-ofx.log");
+                        }
                     }
                 }
 
