@@ -447,8 +447,23 @@ impl InstanceData {
         }
     }
 
+    pub fn get_gyroflow_location() -> Option<String> {
+        match gyroflow_core::util::get_setting("exeLocation") {
+            Some(v) if !v.is_empty() => {
+                Some(v)
+            },
+            _ => {
+                if cfg!(target_os = "macos") && std::path::Path::new("/Applications/Gyroflow.app/Contents/MacOS/gyroflow").exists() {
+                    Some("/Applications/Gyroflow.app".into())
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     pub fn open_gyroflow(&self) {
-        if let Some(v) = gyroflow_core::util::get_setting("exeLocation") {
+        if let Some(v) = Self::get_gyroflow_location() {
             if !v.is_empty() {
                 if let Ok(project) = self.param_project_path.get_value() {
                     if !project.is_empty() {
@@ -834,7 +849,7 @@ impl Execute for GyroflowPlugin {
                 if in_args.get_name()? == "LoadLens" {
                     let instance_data: &mut InstanceData = effect.get_instance_data()?;
                     let lens_directory = || -> Option<std::path::PathBuf> {
-                        let exe = gyroflow_core::util::get_setting("exeLocation").filter(|x| !x.is_empty())?;
+                        let exe = InstanceData::get_gyroflow_location()?;
                         if cfg!(target_os = "macos") {
                             let mut path = std::path::Path::new(&exe).to_path_buf();
                             path.push("Contents");
