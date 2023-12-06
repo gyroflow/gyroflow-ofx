@@ -1294,6 +1294,10 @@ impl Execute for GyroflowPlugin {
                 if _has_vulkan || _has_dx12 { let _ = effect_properties.set_cuda_render_supported("true"); }
 
 				if !self.log_initialized {
+                    // win_dbg_logger::init();
+                    // log::set_max_level(log::LevelFilter::Debug);
+                    // self.log_initialized = true;
+
                     let mut tmp_log = std::env::temp_dir();
                     tmp_log.push("gyroflow-ofx.log");
 
