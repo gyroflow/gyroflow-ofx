@@ -463,26 +463,38 @@ impl InstanceData {
     }
 
     pub fn open_gyroflow(&self) {
-        if let Some(v) = Self::get_gyroflow_location() {
-            if !v.is_empty() {
-                if let Ok(project) = self.param_project_path.get_value() {
-                    if !project.is_empty() {
-                        if cfg!(target_os = "macos") {
-                            let _ = std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn();
+        if cfg!(target_os = "macos") {
+            let mut cmd = std::process::Command::new("osascript");
+            if let Ok(project) = self.param_project_path.get_value() {
+                if !project.is_empty() {
+                    cmd.args(&["-e", &format!("tell application \"Gyroflow\" to open file \"{}\"", project.replace("/", ":").trim_start_matches(':'))]);
+                } else {
+                    cmd.args(&["-e", "tell application \"Gyroflow\" to activate"]);
+                }
+            }
+            let _ = cmd.output();
+        } else {
+            if let Some(v) = Self::get_gyroflow_location() {
+                if !v.is_empty() {
+                    if let Ok(project) = self.param_project_path.get_value() {
+                        if !project.is_empty() {
+                            if cfg!(target_os = "macos") {
+                                let _ = std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn();
+                            } else {
+                                let _ = std::process::Command::new(v).args(["--open", &project]).spawn();
+                            }
                         } else {
-                            let _ = std::process::Command::new(v).args(["--open", &project]).spawn();
-                        }
-                    } else {
-                        if cfg!(target_os = "macos") {
-                            let _ = std::process::Command::new("open").args(["-a", &v]).spawn();
-                        } else {
-                            let _ = std::process::Command::new(v).spawn();
+                            if cfg!(target_os = "macos") {
+                                let _ = std::process::Command::new("open").args(["-a", &v]).spawn();
+                            } else {
+                                let _ = std::process::Command::new(v).spawn();
+                            }
                         }
                     }
                 }
+            } else {
+                rfd::MessageDialog::new().set_description("Unable to find Gyroflow app path. Make sure to run Gyroflow app at least once and that version is at least v1.4.3").show();
             }
-        } else {
-            rfd::MessageDialog::new().set_description("Unable to find Gyroflow app path. Make sure to run Gyroflow app at least once and that version is at least v1.4.3").show();
         }
     }
     fn disable_opencl(&mut self) {
@@ -886,7 +898,14 @@ impl Execute for GyroflowPlugin {
                     effect.get_instance_data::<InstanceData>()?.open_gyroflow();
                 }
                 if in_args.get_name()? == "OpenRecentProject" {
-                    if let Some(v) = gyroflow_core::util::get_setting("lastProject") {
+                    let last_project = /*if cfg!(target_os = "macos") {
+                        let mut cmd = std::process::Command::new("defaults");
+                        cmd.args(&["read", "com.gyroflow-xyz.Gyroflow", "lastProject"]);
+                        cmd.output().ok().map(|x| String::from_utf8_lossy(&x.stdout).to_string())
+                    } else */{
+                        gyroflow_core::util::get_setting("lastProject")
+                    };
+                    if let Some(v) = last_project {
                         if !v.is_empty() {
                             let instance_data: &mut InstanceData = effect.get_instance_data()?;
                             instance_data.param_project_path.set_value(v)?;
@@ -906,7 +925,7 @@ impl Execute for GyroflowPlugin {
                     if instance_data.param_include_project_data.get_value()? {
                         if path.ends_with(".gyroflow") {
                             if let Ok(data) = std::fs::read_to_string(&path) {
-                                if !data.contains("\"raw_imu\": null") || !data.contains("\"quaternions\": null") {
+                                if StabilizationManager::project_has_motion_data(data.as_bytes()) {
                                     instance_data.param_project_data.set_value(data.clone())?;
                                 } else {
                                     if let Some((_, stab)) = instance_data.gyrodata.peek_lru() {
