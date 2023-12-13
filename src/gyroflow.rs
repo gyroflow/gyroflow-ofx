@@ -270,7 +270,9 @@ impl InstanceData {
                 }
             } else {
                 let project_data = {
-                    if let Ok(data) = std::fs::read_to_string(&path) {
+                    if self.param_include_project_data.get_value()? && !self.param_project_data.get_value()?.is_empty() {
+                        self.param_project_data.get_value()?
+                    } else if let Ok(data) = std::fs::read_to_string(&path) {
                         if self.param_include_project_data.get_value()? {
                             self.param_project_data.set_value(data.clone())?;
                         } else {
@@ -278,7 +280,7 @@ impl InstanceData {
                         }
                         data
                     } else {
-                        self.param_project_data.get_value()?
+                        "".to_string()
                     }
                 };
                 let mut is_preset = false;
