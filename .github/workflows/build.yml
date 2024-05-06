@@ -82,7 +82,7 @@ jobs:
           SIGNING_FINGERPRINT: ${{ secrets.MACOS_CERTIFICATE_FINGERPRINT }}
       - name: Notarize and staple release build
         run: |
-          npx notarize-cli --file target/gyroflow-ofx-macosx.dmg --bundle-id xyz.gyroflow.ofx --asc-provider="${{ secrets.MACOS_TEAM }}" --username="${{ secrets.MACOS_ACCOUNT_USER }}" --password="${{ secrets.MACOS_ACCOUNT_PASS }}"
+          xcrun notarytool submit --wait --apple-id ${{ secrets.MACOS_ACCOUNT_USER }} --team-id ${{ secrets.MACOS_TEAM }} --password ${{ secrets.MACOS_ACCOUNT_PASS }} target/gyroflow-ofx-macosx.dmg
           xcrun stapler staple --verbose target/gyroflow-ofx-macosx.dmg
 
       - name: Save Binaries
