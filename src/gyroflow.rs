@@ -243,7 +243,7 @@ impl InstanceData {
                             self.param_input_rotation.set_value(r)?;
                             stab.params.write().video_rotation = r;
                         }
-                        if !stab.gyro.read().file_metadata.has_accurate_timestamps && loading_pending_video_file {
+                        if !stab.gyro.read().file_metadata.read().has_accurate_timestamps && loading_pending_video_file {
                             self.open_gyroflow();
                         }
                     },
@@ -540,7 +540,8 @@ impl Execute for GyroflowPlugin {
                 let org_ratio = params.video_size.0 as f64 / params.video_size.1 as f64;
                 let (has_accurate_timestamps, has_offsets) = {
                     let gyro = stab.gyro.read();
-                    (gyro.file_metadata.has_accurate_timestamps, !gyro.get_offsets().is_empty())
+                    let md = gyro.file_metadata.read();
+                    (md.has_accurate_timestamps, !gyro.get_offsets().is_empty())
                 };
 
                 let frame_number = (params.frame_count - 1) as f64;
