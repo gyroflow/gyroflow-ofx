@@ -768,10 +768,10 @@ impl Execute for GyroflowPlugin {
                 if let Some(ref mut buffers) = buffers {
                     let processed = match output_image.get_pixel_depth()? {
                         BitDepth::None  => { return FAILED; },
-                        BitDepth::Byte  => stab.process_pixels::<RGBA8>  (timestamp_us, buffers),
-                        BitDepth::Short => stab.process_pixels::<RGBA16> (timestamp_us, buffers),
-                        BitDepth::Half  => stab.process_pixels::<RGBAf16>(timestamp_us, buffers),
-                        BitDepth::Float => stab.process_pixels::<RGBAf>  (timestamp_us, buffers)
+                        BitDepth::Byte  => stab.process_pixels::<RGBA8>  (timestamp_us, None, buffers),
+                        BitDepth::Short => stab.process_pixels::<RGBA16> (timestamp_us, None, buffers),
+                        BitDepth::Half  => stab.process_pixels::<RGBAf16>(timestamp_us, None, buffers),
+                        BitDepth::Float => stab.process_pixels::<RGBAf>  (timestamp_us, None, buffers)
                     };
                     match processed {
                         Ok(_) => {
