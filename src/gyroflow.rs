@@ -614,15 +614,16 @@ impl Execute for GyroflowPlugin {
                 };
                 let out_scale = output_image.get_render_scale()?;
                 if (out_scale.x != 1.0 || out_scale.y != 1.0) && !in_args.get_opengl_enabled().unwrap_or_default() {
-                    // log::debug!("out_scale: {:?}", out_scale);
                     let w = (out_size.0 as f64 * out_scale.x as f64).round() as usize;
                     let h = (out_size.1 as f64 * out_scale.y as f64).round() as usize;
-                    out_rect = Some((
-                        0,
-                        out_size.1 - h, // because the coordinates are inverted
-                        w,
-                        h
-                    ));
+                    if out_size.1 > h {
+                        out_rect = Some((
+                            0,
+                            out_size.1 - h, // because the coordinates are inverted
+                            w,
+                            h
+                        ));
+                    }
                 }
 
                 let input_rotation = instance_data.param_input_rotation.get_value_at_time(time).ok().map(|x| x as f32);
