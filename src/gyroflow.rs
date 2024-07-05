@@ -479,18 +479,31 @@ impl InstanceData {
             if let Some(v) = Self::get_gyroflow_location() {
                 if !v.is_empty() {
                     if let Ok(project) = self.param_project_path.get_value() {
-                        if !project.is_empty() {
+                        let result = if !project.is_empty() {
                             if cfg!(target_os = "macos") {
-                                let _ = std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn();
+                                std::process::Command::new("open").args(["-a", &v, "--args", "--open", &project]).spawn()
+                            } else if cfg!(target_os = "windows") && v.starts_with("shell:") {
+                                let mut cmd = std::process::Command::new("cmd.exe");
+                                #[cfg(target_os = "windows")]
+                                { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
+                                cmd.args(["/c", "start", "", &v, "--open", &project]).spawn()
                             } else {
-                                let _ = std::process::Command::new(v).args(["--open", &project]).spawn();
+                                std::process::Command::new(v).args(["--open", &project]).spawn()
                             }
                         } else {
                             if cfg!(target_os = "macos") {
-                                let _ = std::process::Command::new("open").args(["-a", &v]).spawn();
+                                std::process::Command::new("open").args(["-a", &v]).spawn()
+                            } else if cfg!(target_os = "windows") && v.starts_with("shell:") {
+                                let mut cmd = std::process::Command::new("cmd.exe");
+                                #[cfg(target_os = "windows")]
+                                { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
+                                cmd.args(["/c", "start", "", &v]).spawn()
                             } else {
-                                let _ = std::process::Command::new(v).spawn();
+                                std::process::Command::new(v).spawn()
                             }
+                        };
+                        if let Err(e) = result {
+                            rfd::MessageDialog::new().set_description(format!("Unable to start Gyroflow: {e:?}")).show();
                         }
                     }
                 }
