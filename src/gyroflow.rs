@@ -294,8 +294,8 @@ impl InstanceData {
             let loaded = {
                 stab.params.write().calculate_ramped_timestamps(&stab.keyframes.read(), false, true);
                 let params = stab.params.read();
-                self.original_video_size = params.video_size;
-                self.original_output_size = params.video_output_size;
+                self.original_video_size = params.size;
+                self.original_output_size = params.output_size;
                 self.num_frames = params.frame_count;
                 self.fps = params.fps;
                 let loaded = params.duration_ms > 0.0;
@@ -359,16 +359,13 @@ impl InstanceData {
 
             stab.set_fov_overview(self.param_toggle_overview.get_value()?);
 
-            let video_size = {
+            {
                 let mut params = stab.params.write();
                 params.framebuffer_inverted = true;
-                params.video_size
-            };
+            }
 
-            let org_ratio = video_size.0 as f64 / video_size.1 as f64;
 
-            let src_rect = Self::get_center_rect(in_size.0, in_size.1, org_ratio);
-            stab.set_size(src_rect.2, src_rect.3);
+            stab.init_size();
             stab.set_output_size(out_size.0, out_size.1);
 
             {
@@ -550,7 +547,7 @@ impl Execute for GyroflowPlugin {
                 let params = stab.params.read();
                 let fps = params.fps;
                 let src_fps = instance_data.source_clip.get_frame_rate().unwrap_or(fps);
-                let org_ratio = params.video_size.0 as f64 / params.video_size.1 as f64;
+                let org_ratio = params.size.0 as f64 / params.size.1 as f64;
                 let (has_accurate_timestamps, has_offsets) = {
                     let gyro = stab.gyro.read();
                     let md = gyro.file_metadata.read();
