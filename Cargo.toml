@@ -16,7 +16,7 @@ ofx = "0.3"
 log = "0.4"
 itertools = "0.13"
 lru = "0.12"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "89d9ef3", features = ["bundle-lens-profiles"] }
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "ba109a5", features = ["bundle-lens-profiles"] }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false, features = ["bundle-lens-profiles"] }
 log-panics = "2.1"
 rfd = { version = "0.14", default-features = false, features = ["xdg-portal", "async-std"] }
@@ -33,9 +33,9 @@ default = ["use-opencl"]
 use-opencl = ["gyroflow-core/use-opencl"]
 
 [profile.release]
-#opt-level = 3
-#lto = true
-#codegen-units = 1
+opt-level = 3
+lto = true
+codegen-units = 1
 
 [profile.dev]
 opt-level = 2
