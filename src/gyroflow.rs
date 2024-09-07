@@ -447,9 +447,9 @@ impl InstanceData {
     }
 
     pub fn get_gyroflow_location() -> Option<String> {
-        match gyroflow_core::util::get_setting("exeLocation") {
+        match gyroflow_core::settings::try_get("exeLocation").as_ref().and_then(|x| x.as_str()) {
             Some(v) if !v.is_empty() => {
-                Some(v)
+                Some(v.to_owned())
             },
             _ => {
                 if cfg!(target_os = "macos") && std::path::Path::new("/Applications/Gyroflow.app/Contents/MacOS/gyroflow").exists() {
@@ -912,18 +912,10 @@ impl Execute for GyroflowPlugin {
                     effect.get_instance_data::<InstanceData>()?.open_gyroflow();
                 }
                 if in_args.get_name()? == "OpenRecentProject" {
-                    let last_project = /*if cfg!(target_os = "macos") {
-                        let mut cmd = std::process::Command::new("defaults");
-                        cmd.args(&["read", "com.gyroflow-xyz.Gyroflow", "lastProject"]);
-                        cmd.output().ok().map(|x| String::from_utf8_lossy(&x.stdout).to_string())
-                    } else */{
-                        gyroflow_core::util::get_setting("lastProject")
-                    };
-                    if let Some(v) = last_project {
-                        if !v.is_empty() {
-                            let instance_data: &mut InstanceData = effect.get_instance_data()?;
-                            instance_data.param_project_path.set_value(v)?;
-                        }
+                    let last_project = gyroflow_core::settings::get_str("lastProject", "");
+                    if !last_project.is_empty() {
+                        let instance_data: &mut InstanceData = effect.get_instance_data()?;
+                        instance_data.param_project_path.set_value(last_project)?;
                     }
                 }
                 if in_args.get_name()? == "gyrodata" || in_args.get_name()? == "ReloadProject" || in_args.get_name()? == "DontDrawOutside" {
@@ -1290,9 +1282,9 @@ impl Execute for GyroflowPlugin {
                 let mut effect_properties: EffectDescriptor = effect.properties()?;
                 effect_properties.set_grouping("Warp")?;
 
-                effect_properties.set_label("Gyroflow")?;
-                effect_properties.set_short_label("Gyroflow")?;
-                effect_properties.set_long_label("Gyroflow")?;
+                effect_properties.set_label("Gyroflow-old")?;
+                effect_properties.set_short_label("Gyroflow-old")?;
+                effect_properties.set_long_label("Gyroflow-old")?;
 
                 effect_properties.set_supported_pixel_depths(&[BitDepth::Byte, BitDepth::Short, BitDepth::Float])?;
                 effect_properties.set_supported_contexts(&[ImageEffectContext::Filter])?;
