@@ -97,9 +97,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.88"
+version = "1.0.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e1496f8fb1fbf272686b8d37f523dab3e4a7443300055e74cdaa449f3114356"
+checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
 name = "app_dirs2"
@@ -330,9 +330,9 @@ dependencies = [
 
 [[package]]
 name = "async-process"
-version = "2.2.4"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a07789659a4d385b79b18b9127fc27e1a59e1e89117c78c5ea3b806f016374"
+checksum = "63255f1dc2381611000436537bbedfe83183faa303a5a0edaf191edef06526bb"
 dependencies = [
  "async-channel",
  "async-io",
@@ -345,7 +345,6 @@ dependencies = [
  "futures-lite",
  "rustix",
  "tracing",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -602,9 +601,9 @@ checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
 
 [[package]]
 name = "cc"
-version = "1.1.18"
+version = "1.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b62ac837cdb5cb22e10a256099b4fc502b1dfe560cb282963a974d7abd80e476"
+checksum = "45bcde016d64c21da4be18b655631e5ab6d3107607e71a73a9f53eb48aae23fb"
 dependencies = [
  "shlex",
 ]
@@ -1388,9 +1387,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "glow"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f865cbd94bd355b89611211e49508da98a1fce0ad755c1e8448fb96711b24528"
+checksum = "2f4a888dbe8181a7535853469c21c67ca9a1cea9460b16808fc018ea9e55d248"
 dependencies = [
  "js-sys",
  "slotmap",
@@ -1461,7 +1460,7 @@ dependencies = [
 [[package]]
 name = "gyroflow-core"
 version = "1.5.4"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=79693e3#79693e31ce951ecec2a85660793172dfea4dcbd9"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=49c87c1#49c87c1705025573579856622720399c4f8b8bb9"
 dependencies = [
  "ahrs",
  "akaze",
@@ -1630,9 +1629,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.60"
+version = "0.1.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7ffbb5a1b541ea2561f8c41c087286cc091e21e556a4f09a8f6cbf17b69b141"
+checksum = "235e081f3925a06703c2d0117ea8b91f042756fd6e7a6e5d901e8ca1a996b220"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -1986,7 +1985,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "22.0.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=eb18854#eb18854b46a4d6c973a1981be6739ec19282f2f3"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=2fac5e9#2fac5e983e0f0d33f127bde04c2c3b0621faa685"
 dependencies = [
  "arrayvec 0.7.6",
  "bit-set",
@@ -2370,9 +2369,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.20.0"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ea5043e58958ee56f3e15a90aee535795cd7dfd319846288d93c5b57d85cbe"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "ordered-stream"
@@ -3143,7 +3142,7 @@ source = "git+https://github.com/EmbarkStudios/rust-gpu?rev=54f6978#54f6978c25b7
 [[package]]
 name = "stabilize_spirv"
 version = "0.0.0"
-source = "git+https://github.com/gyroflow/gyroflow.git?rev=79693e3#79693e31ce951ecec2a85660793172dfea4dcbd9"
+source = "git+https://github.com/gyroflow/gyroflow.git?rev=49c87c1#49c87c1705025573579856622720399c4f8b8bb9"
 dependencies = [
  "spirv-std",
 ]
@@ -3337,9 +3336,9 @@ checksum = "0dd7358ecb8fc2f8d014bf86f6f638ce72ba252a2c3a2572f2a795f1d23efb41"
 
 [[package]]
 name = "toml_edit"
-version = "0.22.20"
+version = "0.22.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "583c44c02ad26b0c3f3066fe629275e50627026c51ac2e595cca4c230ce1ce1d"
+checksum = "3b072cee73c449a636ffd6f32bd8de3a9f7119139aff882f44943ce2986dc5cf"
 dependencies = [
  "indexmap",
  "toml_datetime",
@@ -3615,7 +3614,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "22.0.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=eb18854#eb18854b46a4d6c973a1981be6739ec19282f2f3"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=2fac5e9#2fac5e983e0f0d33f127bde04c2c3b0621faa685"
 dependencies = [
  "arrayvec 0.7.6",
  "cfg_aliases 0.1.1",
@@ -3639,7 +3638,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "22.0.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=eb18854#eb18854b46a4d6c973a1981be6739ec19282f2f3"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=2fac5e9#2fac5e983e0f0d33f127bde04c2c3b0621faa685"
 dependencies = [
  "arrayvec 0.7.6",
  "bit-vec",
@@ -3664,7 +3663,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "22.0.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=eb18854#eb18854b46a4d6c973a1981be6739ec19282f2f3"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=2fac5e9#2fac5e983e0f0d33f127bde04c2c3b0621faa685"
 dependencies = [
  "android_system_properties",
  "arrayvec 0.7.6",
@@ -3707,7 +3706,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "22.0.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=eb18854#eb18854b46a4d6c973a1981be6739ec19282f2f3"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=2fac5e9#2fac5e983e0f0d33f127bde04c2c3b0621faa685"
 dependencies = [
  "bitflags 2.6.0",
  "js-sys",
