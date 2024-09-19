@@ -6,7 +6,7 @@ target/gyroflow-ofx-linux.zip: target/release/libgyroflow_ofx.so LICENSE README.
 	rm -Rf target/gyroflow-ofx-linux
 	rm -f target/gyroflow-ofx-linux.zip
 	mkdir -p target/gyroflow-ofx-linux/Gyroflow-old.ofx.bundle/Contents/Linux-x86-64
-	cp target/release/libgyroflow_ofx.so target/gyroflow-ofx-linux/Gyroflow-old.ofx.bundle/Contents/Linux-x86-64/Gyroflow.ofx
+	cp target/release/libgyroflow_ofx.so target/gyroflow-ofx-linux/Gyroflow-old.ofx.bundle/Contents/Linux-x86-64/Gyroflow-old.ofx
 	cp target/bundle-common/Info.plist LICENSE README.md target/gyroflow-ofx-linux/Gyroflow-old.ofx.bundle/Contents/
 	cd target/gyroflow-ofx-linux && zip -r ../gyroflow-ofx-linux.zip .
 
@@ -19,7 +19,7 @@ target/gyroflow-ofx-macosx.dmg: target/x86_64-apple-darwin/release/libgyroflow_o
 	cp target/bundle-common/Info.plist LICENSE README.md target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle/Contents/
 
 	codesign -vvvv --strict --options=runtime --timestamp --force -s ${SIGNING_FINGERPRINT} target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle/Contents/MacOS/Gyroflow.dylib
-	mv target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle/Contents/MacOS/Gyroflow.dylib target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle/Contents/MacOS/Gyroflow.ofx
+	mv target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle/Contents/MacOS/Gyroflow.dylib target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle/Contents/MacOS/Gyroflow-old.ofx
 
 	codesign -vvvv --deep --strict --options=runtime --timestamp --force -s ${SIGNING_FINGERPRINT} target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle
 	codesign -vvvv --deep --verify target/gyroflow-ofx-macosx/Gyroflow-old.ofx.bundle
@@ -34,6 +34,6 @@ target/gyroflow-ofx-windows.zip: target/release/gyroflow_ofx.dll LICENSE README.
 	rm -Rf target/gyroflow-ofx-windows
 	rm -f target/gyroflow-ofx-windows.zip
 	mkdir -p target/gyroflow-ofx-windows/Gyroflow-old.ofx.bundle/Contents/Win64
-	cp target/release/gyroflow_ofx.dll target/gyroflow-ofx-windows/Gyroflow-old.ofx.bundle/Contents/Win64/Gyroflow.ofx
+	cp target/release/gyroflow_ofx.dll target/gyroflow-ofx-windows/Gyroflow-old.ofx.bundle/Contents/Win64/Gyroflow-old.ofx
 	cp target/bundle-common/Info.plist LICENSE README.md target/gyroflow-ofx-windows/Gyroflow-old.ofx.bundle/Contents/
 	cd target/gyroflow-ofx-windows && zip -r ../gyroflow-ofx-windows.zip .
