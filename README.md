@@ -1,3 +1,10 @@
+# Development has moved to [a new repository](https://github.com/gyroflow/gyroflow-plugins).
+## This code is obsolete now. If you used the OpenFX plugin with existing projects, you can still download the compatible version from [the dev build page](https://gyroflow.xyz/devbuild/) - there's a link to "Old OpenFX"
+## Use the new version for new projects
+
+<hr>
+<hr>
+
 <span class="badge-patreon"><a href="https://www.patreon.com/smartislav" title="Donate to this project using Patreon"><img src="https://img.shields.io/badge/patreon-donate-yellow.svg" alt="Patreon donate button" /></a></span>
 ![example workflow](https://github.com/gyroflow/gyroflow-ofx/actions/workflows/build.yml/badge.svg)
 
