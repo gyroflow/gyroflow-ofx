@@ -27,7 +27,7 @@ jobs:
           "
 
       - name: Save Binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: gyroflow-ofx-linux
           path: target/gyroflow-ofx-linux.zip
@@ -86,7 +86,7 @@ jobs:
           xcrun stapler staple --verbose target/gyroflow-ofx-macosx.dmg
 
       - name: Save Binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: gyroflow-ofx-macosx
           path: target/gyroflow-ofx-macosx.dmg
