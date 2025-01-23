@@ -131,7 +131,7 @@ jobs:
       - run: make target/gyroflow-ofx-windows.zip
 
       - name: Save Binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: gyroflow-ofx-windows
           path: target/gyroflow-ofx-windows.zip
