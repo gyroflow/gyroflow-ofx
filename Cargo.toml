@@ -14,19 +14,19 @@ path = "src/lib.rs"
 [dependencies]
 ofx = "0.3"
 log = "0.4"
-itertools = "0.13"
+itertools = "0.14"
 lru = "0.12"
-gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "49c87c1", features = ["bundle-lens-profiles", "cache-gyro-metadata"] }
+gyroflow-core = { git = "https://github.com/gyroflow/gyroflow.git", default-features = false, rev = "ffb9556", features = ["bundle-lens-profiles", "cache-gyro-metadata"] }
 #gyroflow-core = { path = "../gyroflow/src/core", default-features = false, features = ["bundle-lens-profiles"] }
 log-panics = "2.1"
-rfd = { version = "0.14", default-features = false, features = ["xdg-portal", "async-std"] }
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
 parking_lot = "0.12"
 lazy_static = "1.5.0"
-fastrand = "2.1.1"
+fastrand = "2.3.0"
 simplelog = "0.12.2"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies.metal]
-version = "0.29.0"
+version = "0.31.0"
 
 [features]
 default = ["use-opencl"]

@@ -212,7 +212,7 @@ impl InstanceData {
                 //     }
                 // }
 
-                match stab.load_video_file(&filesystem::path_to_url(&path), None) {
+                match stab.load_video_file(&filesystem::path_to_url(&path), None, true) {
                     Ok(md) => {
                         if let Ok(d) = self.param_embedded_lens.get_value() {
                             if !d.is_empty() {
@@ -226,7 +226,7 @@ impl InstanceData {
                         if let Ok(d) = self.param_embedded_preset.get_value() {
                             if !d.is_empty() {
                                 let mut is_preset = false;
-                                if let Err(e) = stab.import_gyroflow_data(d.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset) {
+                                if let Err(e) = stab.import_gyroflow_data(d.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset, true) {
                                     rfd::MessageDialog::new()
                                         .set_description(&format!("Failed to load preset: {e:?}"))
                                         .show();
@@ -251,7 +251,7 @@ impl InstanceData {
                         let embedded_data = self.param_project_data.get_value()?;
                         if !embedded_data.is_empty() {
                             let mut is_preset = false;
-                            stab.import_gyroflow_data(embedded_data.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
+                            stab.import_gyroflow_data(embedded_data.as_bytes(), true, None, |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset, true).map_err(|e| {
                                 log::error!("load_gyro_data error: {}", &e);
                                 self.update_loaded_state(false);
                                 Error::UnknownError
@@ -284,7 +284,7 @@ impl InstanceData {
                     }
                 };
                 let mut is_preset = false;
-                stab.import_gyroflow_data(project_data.as_bytes(), true, Some(&filesystem::path_to_url(&path)), |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset).map_err(|e| {
+                stab.import_gyroflow_data(project_data.as_bytes(), true, Some(&filesystem::path_to_url(&path)), |_|(), Arc::new(AtomicBool::new(false)), &mut is_preset, true).map_err(|e| {
                     log::error!("load_gyro_data error: {}", &e);
                     self.update_loaded_state(false);
                     Error::UnknownError
@@ -354,7 +354,7 @@ impl InstanceData {
             self.update_loaded_state(loaded);
 
             if disable_stretch {
-                stab.disable_lens_stretch();
+                stab.disable_lens_stretch(true);
             }
 
             stab.set_fov_overview(self.param_toggle_overview.get_value()?);
